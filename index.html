@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Cyber Defusal Zone (v9.5)</title>
+    <title>AR Cyber Defusal Zone (v10.0)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
@@ -152,7 +152,7 @@
         <div id="ar-wires-overlay"></div>
 
         <div id="ui-header">
-            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER ONLY v9.5</span>
+            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER ONLY v10.0</span>
             <div id="timer">30.00</div>
             <div id="instruction">กำลังโหลดระบบ AI...</div>
         </div>
@@ -178,7 +178,7 @@
         let timeLeft = 30.00;
         let timerInterval;
         let gameActive = false;
-        let isCooldown = false; // ตัวแปรล็อกระบบชั่วคราวช่วงนับถอยหลัง
+        let isCooldown = false;
         let targetColor = '';
         let wireAreas = [];
 
@@ -192,8 +192,10 @@
         const hands = new Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
+        
+        // เพิ่มสแกนสูงสุดเป็น 2 มือ เพื่อนำมาคัดกรองมือที่ไม่ได้เล่นออก
         hands.setOptions({
-            maxNumHands: 1,
+            maxNumHands: 2,
             modelComplexity: 1,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
@@ -239,7 +241,6 @@
                 overlay.appendChild(capsule);
             });
 
-            // ตั้งค่าตำแหน่งสัมพัทธ์
             wireAreas = [];
             shuffled.forEach((wire, index) => {
                 let minX = 0.05 + (index * 0.3);
@@ -253,7 +254,6 @@
                 });
             });
 
-            // เปิดระบการนับถอยหลังเตือนผู้เล่นให้เอามือลง
             startCooldown(targetObj);
         }
 
@@ -273,7 +273,7 @@
                     document.getElementById('instruction').innerHTML = `เอานิ้วชี้กางอากาศแตะที่: <span style="color:${targetObj.hex}; font-weight:bold;">"${targetObj.label}"</span>`;
                     startTimer();
                 }
-            }, 400); // วิ่งนับถอยหลังอย่างรวดเร็วเพื่อให้ไม่เสียเวลา
+            }, 400);
         }
 
         function onHandResults(results) {
@@ -281,9 +281,20 @@
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                const indexFingerTip = landmarks[8]; 
                 
+                // ค้นหาและเลือกเฉพาะ "มือที่ยกขึ้นสูงที่สุด" (ค่า Y น้อยที่สุดในจอภาพ)
+                let activeHandLandmarks = results.multiHandLandmarks[0];
+                let highestY = 1.0;
+
+                results.multiHandLandmarks.forEach((landmarks) => {
+                    const currentHandTipY = landmarks[8].y; 
+                    if (currentHandTipY < highestY) {
+                        highestY = currentHandTipY;
+                        activeHandLandmarks = landmarks;
+                    }
+                });
+
+                const indexFingerTip = activeHandLandmarks[8]; 
                 const rawX = 1 - indexFingerTip.x;
                 const rawY = indexFingerTip.y;
 
@@ -292,13 +303,12 @@
 
                 canvasCtx.beginPath();
                 canvasCtx.arc(fingerX, fingerY, 10, 0, 2 * Math.PI);
-                canvasCtx.fillStyle = isCooldown ? '#ffaa00' : '#00f0ff'; // ถ้าช่วงคูลดาวน์จะเป็นจุดสีส้มเตือน
+                canvasCtx.fillStyle = isCooldown ? '#ffaa00' : '#00f0ff';
                 canvasCtx.fill();
                 canvasCtx.strokeStyle = '#ffffff';
                 canvasCtx.lineWidth = 2;
                 canvasCtx.stroke();
 
-                // ถ้าติดคูลดาวน์อยู่ จะไม่ทำการเช็กตัดสายไฟเด็ดขาด
                 if (!gameActive || isCooldown) return;
 
                 wireAreas.forEach(wire => {
