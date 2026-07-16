@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Cyber Defusal Zone (AI Finger Detection)</title>
+    <title>AR Cyber Defusal Zone (AI Finger Only)</title>
     <!-- ดึง AI ตรวจจับมือของ Google มาใช้งาน -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -33,7 +33,6 @@
             overflow: hidden;
         }
 
-        /* ซ่อนวิดีโอจริงแล้วใช้ Canvas วาดทับเพื่อทำระบบกลับด้านกล้อง Mirror */
         #webcam { display: none; }
         #output_canvas {
             position: absolute;
@@ -42,7 +41,8 @@
             width: 100%;
             height: 100%;
             z-index: 1;
-            transform: scaleX(-1); /* กลับด้านซ้ายขวาให้เหมือนกระจก จะได้ไม่งงเวลาเลื่อนมือ */
+            transform: scaleX(-1);
+            pointer-events: none; /* ห้ามเมาส์คลิกโดนกล้อง */
         }
 
         #ar-wires-overlay {
@@ -57,6 +57,7 @@
             align-items: flex-end;
             box-sizing: border-box;
             padding: 0 40px 60px 40px;
+            pointer-events: none; /* ปิดการคลิกเมาส์และจิ้มจอถาวร 100% เมาส์จะกดสายไฟไม่ได้เลย */
         }
 
         .wire-capsule {
@@ -64,6 +65,7 @@
             flex-direction: column;
             align-items: center;
             position: relative;
+            pointer-events: none; 
         }
 
         .wire-line {
@@ -96,6 +98,7 @@
             padding: 15px 0 10px 0;
             color: white;
             text-align: center;
+            pointer-events: none;
         }
 
         #timer {
@@ -118,6 +121,8 @@
             align-items: center;
             flex-direction: column;
             color: white;
+            /* หน้าจอนี้ให้กดปุ่มเริ่มใหม่ด้วยเมาส์ได้ */
+            pointer-events: auto; 
         }
         #success-screen { background: rgba(0, 15, 5, 0.95); border: 4px solid #00ff66; }
         #fail-screen { background: rgba(20, 0, 5, 0.95); border: 4px solid #ff0055; }
@@ -132,6 +137,7 @@
             border-radius: 8px;
             cursor: pointer;
             margin-top: 15px;
+            pointer-events: auto;
         }
         #success-screen .btn-action { background: #00cc52; }
         #fail-screen .btn-action { background: #ff0055; }
@@ -145,7 +151,7 @@
         <div id="ar-wires-overlay"></div>
 
         <div id="ui-header">
-            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER DETECTOR v6.0</span>
+            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER ONLY v6.1</span>
             <div id="timer">30.00</div>
             <div id="instruction">กำลังโหลดระบบ AI แขนเสื้อไม่ระเบิด...</div>
         </div>
@@ -172,7 +178,7 @@
         let timerInterval;
         let gameActive = false;
         let targetColor = '';
-        let wirePositions = []; // เก็บพิกเซลตำแหน่งสายไฟไว้เช็กกับนิ้วมือ
+        let wirePositions = []; 
 
         const allColors = [
             { name: 'red', hex: '#ff0055', label: 'สายไฟสีแดง' },
@@ -181,7 +187,6 @@
             { name: 'green', hex: '#00ff66', label: 'สายไฟสีเขียว' }
         ];
 
-        // ตั้งค่าระบบ AI Hands ของ Google
         const hands = new Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
@@ -210,12 +215,12 @@
             overlay.innerHTML = '';
             
             let shuffled = [...allColors].sort(() => 0.5 - Math.random());
-            let currentWires = shuffled.slice(0, 3); // แสดง 3 เส้นให้พอดีจอ
+            let currentWires = shuffled.slice(0, 3); 
             
             let targetObj = currentWires[Math.floor(Math.random() * currentWires.length)];
             targetColor = targetObj.name;
             
-            document.getElementById('instruction').innerHTML = `เอานิ้วชี้แตะค้างไว้ที่: <span style="color:${targetObj.hex}; font-weight:bold;">"${targetObj.label}"</span>`;
+            document.getElementById('instruction').innerHTML = `เอานิ้วชี้กางอากาศแตะที่: <span style="color:${targetObj.hex}; font-weight:bold;">"${targetObj.label}"</span>`;
 
             currentWires.forEach((wire, index) => {
                 const capsule = document.createElement('div');
@@ -236,7 +241,6 @@
                 overlay.appendChild(capsule);
             });
 
-            // รอคำนวณตำแหน่งพิกเซลของสายไฟบนจอหลังจากวาดเสร็จ
             setTimeout(() => {
                 wirePositions = [];
                 currentWires.forEach(wire => {
@@ -244,7 +248,6 @@
                     if (el) {
                         const rect = el.getBoundingClientRect();
                         const panelRect = document.getElementById('bomb-panel').getBoundingClientRect();
-                        // บันทึกขอบเขตพิกเซลของสายไฟแต่ละเส้นไว้
                         wirePositions.push({
                             name: wire.name,
                             left: rect.left - panelRect.left,
@@ -257,23 +260,18 @@
             }, 300);
         }
 
-        // ฟังก์ชันเมื่อ AI ตรวจจับมือเจอ
         function onHandResults(results) {
-            // วาดภาพวิดีโอจากกล้องลงบน Canvas
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0 && gameActive) {
                 const landmarks = results.multiHandLandmarks[0];
+                const indexFingerTip = landmarks[8]; // จุดปลายนิ้วชี้
                 
-                // ดึงเฉพาะพิกเซลจุดปลายของ "นิ้วชี้" (Index Finger Tip = จุดที่ 8 ในระบบของ MediaPipe)
-                const indexFingerTip = landmarks[8];
-                
-                // คำนวณพิกเซลให้ตรงกับขนาดหน้าจอเกม (และสลับด้าน x เนื่องจากเรา Mirror กล้อง)
                 const fingerX = (1 - indexFingerTip.x) * canvasElement.width;
                 const fingerY = indexFingerTip.y * canvasElement.height;
 
-                // วาดจุดเป้าเล็งสีฟ้าไว้ที่ปลายนิ้วชี้เพื่อให้รู้ว่า AI นิ้วเราอยู่ตรงไหน
+                // วาดเป้าเล็งสีฟ้าที่ปลายนิ้วชี้
                 canvasCtx.beginPath();
                 canvasCtx.arc(fingerX, fingerY, 8, 0, 2 * Math.PI);
                 canvasCtx.fillStyle = '#00f0ff';
@@ -282,7 +280,6 @@
                 canvasCtx.lineWidth = 2;
                 canvasCtx.stroke();
 
-                // เช็กว่าปลายนิ้วชี้เคลื่อนที่เข้าไปในขอบเขตของสายไฟเส้นไหนหรือไม่
                 wirePositions.forEach(wire => {
                     if (fingerX >= wire.left && fingerX <= wire.right &&
                         fingerY >= wire.top && fingerY <= wire.bottom) {
@@ -296,9 +293,9 @@
             if (!gameActive) return;
 
             if (colorName === targetColor) {
-                endGame(true, `สุดยอด! ปลายนิ้วชี้ของคุณกู้ระเบิดได้ถูกต้อง!`);
+                endGame(true, `ภารกิจสำเร็จ! ใช้ปลายนิ้วชี้ตัดสายไฟถูกต้อง`);
             } else {
-                endGame(false, `ระเบิดทำงาน! นิ้วชี้ของคุณไปโดนสายไฟเส้นอื่น!`);
+                endGame(false, `ระเบิดทำงาน! นิ้วชี้ของคุณไปโดนสายไฟเส้นอื่น`);
             }
         }
 
@@ -315,7 +312,6 @@
         }
 
         function resetGame() {
-            // บังคับให้ขนาดยังคงเป็น 640x480 เสมอ
             canvasElement.width = 640;
             canvasElement.height = 480;
             
