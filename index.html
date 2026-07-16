@@ -187,7 +187,7 @@
         <div id="explosion-effect"></div>
 
         <div id="ui-header">
-            <span style="font-size: 12px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">CYBER DEFUSAL SYSTEM v2.6</span>
+            <span style="font-size: 12px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">CYBER DEFUSAL SYSTEM v3.0</span>
             <div id="timer">30.00</div>
             <div id="instruction"></div>
         </div>
@@ -212,7 +212,8 @@
         let videoElement = null;
         
         let targetColor = '';
-        let previousPixels = {};
+        let initialBrightness = {};
+        let isFirstScan = true;
         
         const allColors = [
             { name: 'red', hex: '#ff0055', label: 'สายไฟสีแดง' },
@@ -240,8 +241,10 @@
                 .then(function(stream) {
                     videoElement.srcObject = stream;
                     videoElement.addEventListener('playing', function() {
-                        resetGame(); 
-                        startCheckingLoop();
+                        setTimeout(() => {
+                            resetGame(); 
+                            startCheckingLoop();
+                        }, 1000); // หน่วงเวลา 1 วินาทีให้กล้องปรับแสงเสร็จก่อนเริ่ม
                     });
                 })
                 .catch(function(err) {
@@ -295,6 +298,11 @@
                         checkWireObstruction(wire.name);
                     }
                 });
+                
+                // หลังจากสแกนรอบแรกเสร็จ ให้ปิดสถานะสแกนครั้งแรก
+                if (isFirstScan) {
+                    isFirstScan = false;
+                }
             }, 100); 
         }
 
@@ -310,35 +318,34 @@
             
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = 8; 
-            canvas.height = 8;
+            canvas.width = 10; 
+            canvas.height = 10;
 
             try {
                 ctx.drawImage(videoElement, x, y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const data = imageData.data;
 
-                if (!previousPixels[colorName]) {
-                    previousPixels[colorName] = new Uint8ClampedArray(data);
+                // คำนวณความสว่างเฉลี่ย (Luminance) ของพื้นที่สายไฟนั้น
+                let totalBrightness = 0;
+                for (let i = 0; i < data.length; i += 4) {
+                    totalBrightness += (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
+                }
+                let avgBrightness = totalBrightness / (data.length / 4);
+
+                // บันทึกค่าแสงเริ่มต้นตอนเปิดเกม (Baseline)
+                if (isFirstScan || !initialBrightness[colorName]) {
+                    initialBrightness[colorName] = avgBrightness;
                     return;
                 }
 
-                let totalDifference = 0;
-                let pixelCount = data.length / 4;
+                // คำนวณเปอร์เซ็นต์ความมืดที่ลดลง (เมื่อเอามือบัง แสงจะดรอปลง)
+                let dropPercent = ((initialBrightness[colorName] - avgBrightness) / initialBrightness[colorName]) * 100;
 
-                for (let i = 0; i < data.length; i += 4) {
-                    let rDiff = Math.abs(data[i] - previousPixels[colorName][i]);
-                    let gDiff = Math.abs(data[i+1] - previousPixels[colorName][i+1]);
-                    let bDiff = Math.abs(data[i+2] - previousPixels[colorName][i+2]);
-                    totalDifference += (rDiff + gDiff + bDiff) / 3;
-                }
+                // ตั้งระดับปานกลาง: ถ้าแสงลดลงเกิน 25% (มือบังจนมืดลงพอดี) ถือว่าเป็นการตัดสายไฟ
+                let lightSensitivityThreshold = 25; 
 
-                let avgDifference = totalDifference / pixelCount;
-                previousPixels[colorName] = new Uint8ClampedArray(data);
-
-                const midSensitivity = 16; 
-
-                if (avgDifference > midSensitivity) {
+                if (dropPercent > lightSensitivityThreshold) {
                     triggerWireCut(colorName);
                 }
             } catch (e) {}
@@ -387,7 +394,8 @@
         function resetGame() {
             timeLeft = 30.00;
             gameActive = true;
-            previousPixels = {}; 
+            initialBrightness = {};
+            isFirstScan = true;
             document.getElementById('timer').innerText = "30.00";
             document.getElementById('success-screen').style.display = 'none';
             document.getElementById('fail-screen').style.display = 'none';
