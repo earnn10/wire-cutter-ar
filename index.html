@@ -1,192 +1,80 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Wire Cutter Bomb Defusal</title>
-    <!-- เรียกใช้ไลบรารี tracking.js สำหรับการสแกนผ่านกล้อง -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tracking.js/1.3.0/tracking-min.js"></script>
-</head>
-<body style="margin: 0; padding: 20px; font-family: sans-serif; background: #111; display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+// --- [คัดลอกโค้ดนี้ไปวางทับฟังก์ชันเดิม] ---
 
-    <!-- หน้าจอแสดงผลเกม AR เวอร์ชันอัปเกรด -->
-    <div id="game-canvas-container" style="position: relative; width: 100%; max-width: 600px; height: 450px; text-align: center; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+// ตัวแปรสำหรับเก็บค่าความสว่างเริ่มต้น (Baseline)
+let initialBrightness = {
+    red: 255,
+    yellow: 255,
+    blue: 255
+};
+let isFirstScan = true; // สำหรับกำหนดค่าเริ่มต้น
+
+function checkWireObstruction(colorName, sensitivityThreshold) {
+    const wire = document.getElementById(colorName + '-wire');
+    if (!wire) return;
+    
+    const rect = wire.getBoundingClientRect();
+    const containerRect = document.getElementById('game-canvas-container').getBoundingClientRect();
+
+    // คำนวณพิกเซลสัมพัทธ์ในกรอบวิดีโอ
+    const x = rect.left - containerRect.left;
+    const y = rect.top - containerRect.top;
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 10; // สแกนพื้นที่เล็กๆ พอ
+    canvas.height = 10;
+
+    try {
+        // ดึงภาพจากวิดีโอเฉพาะจุดที่สายไฟเส้นนั้นตั้งอยู่
+        ctx.drawImage(videoElement, x, y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        let totalBrightness = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            // คำนวณความสว่าง (Brightness) ของพิกเซล (สูตร Luminance)
+            let brightness = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
+            totalBrightness += brightness;
+        }
+        let avgBrightness = totalBrightness / (data.length / 4);
+
+        // --- ส่วนที่แก้ไข: ระบบตรวจจับการเปลี่ยนแปลงของแสง (Advanced Sensitivity) ---
         
-        <!-- ภาพพื้นหลังจากการเชื่อมต่อกล้อง (Iriun Webcam) -->
-        <div id="ar-camera-feed" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;"></div>
+        // 1. ถ้าเป็นการสแกนครั้งแรกเมื่อเริ่มเกม ให้เก็บค่าความสว่างปกติไว้เป็นฐาน (Baseline)
+        if (isFirstScan) {
+            initialBrightness[colorName] = avgBrightness;
+            if (colorName === 'blue') isFirstScan = false; // เมื่อสแกนครบ 3 เส้น ปิดสแกนครั้งแรก
+            return; // ยังไม่ต้องตรวจสอบ
+        }
 
-        <!-- ส่วนที่วาดสายไฟ AR ทับลงบนหน้าจอ (z-index สูงกว่ากล้อง) -->
-        <div id="ar-wires-overlay" style="position: absolute; top: 0; left: 0; z-index: 2; width: 100%; height: 100%; display: flex; justify-content: space-around; align-items: center; box-sizing: border-box; padding: 0 40px;">
-            
-            <!-- สายไฟสีแดง จำลอง -->
-            <div style="display: flex; flex-direction: column; align-items: center; margin-top: 80px;">
-                <div id="red-wire" style="width: 30px; height: 220px; background: #ff0000; border-radius: 5px; border: 3px solid #fff; box-shadow: 0 0 15px rgba(255,0,0,0.8);"></div>
-                <p style="color: white; font-weight: bold; font-size: 14px; margin-top: 8px; text-shadow: 1px 1px 3px #000;">[ห้ามตัด]</p>
-            </div>
-            
-            <!-- สายไฟสีเหลือง จำลอง (จุดเป้าหมาย) -->
-            <div style="display: flex; flex-direction: column; align-items: center; margin-top: 80px;">
-                <div id="yellow-wire" style="width: 30px; height: 220px; background: #ffff00; border-radius: 5px; border: 3px solid #fff; box-shadow: 0 0 15px rgba(255,255,0,0.8);"></div>
-                <p style="color: #ffff00; font-weight: bold; font-size: 14px; margin-top: 8px; text-shadow: 1px 1px 3px #000;">--> ตัดที่นี่ <--</p>
-            </div>
-            
-            <!-- สายไฟสีน้ำเงิน จำลอง -->
-            <div style="display: flex; flex-direction: column; align-items: center; margin-top: 80px;">
-                <div id="blue-wire" style="width: 30px; height: 220px; background: #0000ff; border-radius: 5px; border: 3px solid #fff; box-shadow: 0 0 15px rgba(0,0,255,0.8);"></div>
-                <p style="color: white; font-weight: bold; font-size: 14px; margin-top: 8px; text-shadow: 1px 1px 3px #000;">[ห้ามตัด]</p>
-            </div>
-            
-        </div>
+        // 2. คำนวณเปอร์เซ็นต์ความสว่างที่ลดลงจากค่าเริ่มต้น
+        // (ปกติจะอยู่ระหว่าง 0 - 100, ถ้ามืดลง ค่าจะเข้าใกล้ 100)
+        const percentDrop = ((initialBrightness[colorName] - avgBrightness) / initialBrightness[colorName]) * 100;
 
-        <!-- ข้อความแจ้งเตือนคำสั่ง (วาดทับด้านบนสุด) -->
-        <div id="ui-overlay" style="position: absolute; top: 15px; left: 0; width: 100%; z-index: 3; color: white; text-shadow: 1px 1px 4px #000;">
-            <h2 style="margin: 0 0 5px 0; font-size: 22px;">กู้ระเบิดสายไฟ AR ผ่านกล้อง</h2>
-            <div id="timer" style="font-size: 38px; color: #ffcc00; font-weight: bold;">30.00</div>
-            <p id="instruction" style="font-size: 15px; color: #ff8888; margin: 5px 0 0 0; font-weight: bold;">คำสั่ง: นำวัตถุหรือนิ้วมาบังทับ "สายไฟสีเหลือง" เพื่อตัด!</p>
-        </div>
+        // 3. ปรับค่าความไว (Sensitivity Threshold): 
+        // ปกติค่า percentDrop จะอยู่ราวๆ 20-40% เมื่อโดนมือบัง
+        // ผมจะตั้งค่าเริ่มต้นที่ 25 (คือถ้ามืดลง 25% ก็นับว่าตัดสำเร็จ)
+        const sensitivity = 25; 
+
+        // 4. เงื่อนไขชนะ: ถ้าความสว่างลดลงเกินค่าความไวที่ตั้งไว้
+        if (percentDrop > sensitivity) {
+            triggerWireCut(colorName);
+        }
         
-        <!-- หน้าต่างแจ้งผลลัพธ์ (ซ่อนไว้ก่อน) -->
-        <div id="result-screen" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 4; justify-content: center; align-items: center; flex-direction: column; color: white;">
-            <h1 id="result-status" style="font-size: 32px; font-weight: bold; margin: 0;"></h1>
-            <p id="result-msg" style="margin: 15px 0; font-size: 16px; max-width: 80%; text-align: center;"></p>
-            <button onclick="resetGame()" style="padding: 12px 25px; font-size: 18px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">เล่นใหม่อีกครั้ง</button>
-        </div>
-    </div>
+    } catch (e) {
+        console.log("สแกนภาพผิดพลาดชั่วคราว");
+    }
+}
 
-    <script>
-        let timeLeft = 30.00;
-        let timerInterval;
-        let gameActive = false;
-        let videoElement = null;
+// และต้องเพิ่มคำสั่งรีเซ็ตค่า baseline ในฟังก์ชัน resetGame() ด้วยครับ
+// [คัดลอกส่วนนี้ไปวางในฟังก์ชัน resetGame() ที่มีอยู่แล้ว]
+function resetGame() {
+    // ... [โค้ดเดิมของคุณ] ...
+    
+    // --- เพิ่ม 1 บรรทัดนี้ ---
+    isFirstScan = true; // สั่งให้สแกนหาค่า baseline ใหม่เมื่อเริ่มเกม
+    
+    // ... [โค้ดเดิมของคุณ] ...
+}
 
-        window.onload = function() {
-            startARSystem();
-        };
-
-        // --- ระบบเปิดกล้อง & สแกนพิกเซลภาพ ---
-        function startARSystem() {
-            videoElement = document.createElement('video');
-            videoElement.setAttribute('autoplay', '');
-            videoElement.setAttribute('muted', '');
-            videoElement.setAttribute('playsinline', '');
-            videoElement.style.width = '100%';
-            videoElement.style.height = '100%';
-            videoElement.style.objectFit = 'cover';
-            document.getElementById('ar-camera-feed').appendChild(videoElement);
-
-            navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-                .then(function(stream) {
-                    videoElement.srcObject = stream;
-                    videoElement.addEventListener('playing', function() {
-                        resetGame(); // เริ่มเกมเมื่อกล้องพร้อม
-                        startCheckingLoop();
-                    });
-                })
-                .catch(function(err) {
-                    console.error("ไม่สามารถเชื่อมต่อกล้องได้: ", err);
-                    alert("ไม่เจออุปกรณ์กล้อง กรุณาเปิดแอป Iriun ในคอมและมือถือให้เรียบร้อยแล้วรีเฟรชครับ");
-                });
-        }
-
-        // ลูปสำหรับสแกนหาการบังสายไฟ
-        function startCheckingLoop() {
-            setInterval(() => {
-                if (!gameActive || !videoElement) return;
-
-                // ตรวจสอบการบังสายไฟแต่ละเส้น
-                checkWireObstruction('yellow', 75); // ตรวจสายเหลือง (ค่า Threshold ความมืดที่ 75)
-                checkWireObstruction('red', 75);    // ตรวจสายแดง
-                checkWireObstruction('blue', 75);   // ตรวจสายน้ำเงิน
-            }, 150); // ตรวจสอบทุกๆ 0.15 วินาที
-        }
-
-        function checkWireObstruction(colorName, threshold) {
-            const wire = document.getElementById(colorName + '-wire');
-            if (!wire) return;
-            
-            const rect = wire.getBoundingClientRect();
-            const containerRect = document.getElementById('game-canvas-container').getBoundingClientRect();
-
-            // คำนวณพิกเซลสัมพัทธ์ในกรอบวิดีโอ
-            const x = rect.left - containerRect.left;
-            const y = rect.top - containerRect.top;
-            
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = 8;
-            canvas.height = 8;
-
-            try {
-                // ดึงภาพจากวิดีโอเฉพาะจุดที่สายไฟเส้นนั้นตั้งอยู่
-                ctx.drawImage(videoElement, x, y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const data = imageData.data;
-
-                let totalBrightness = 0;
-                for (let i = 0; i < data.length; i += 4) {
-                    // คำนวณความสว่าง (Brightness) ของพิกเซล
-                    let brightness = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
-                    totalBrightness += brightness;
-                }
-                let avgBrightness = totalBrightness / (data.length / 4);
-
-                // ถ้าจุดนั้นมืดลงกว่าค่าที่ตั้งไว้ แปลว่ามีวัตถุ/นิ้วมาบังหน้ากล้องตรงสายไฟเส้นนั้น
-                if (avgBrightness < threshold) {
-                    triggerWireCut(colorName);
-                }
-            } catch (e) {
-                console.log("สแกนภาพผิดพลาดชั่วคราว");
-            }
-        }
-
-        // --- ระบบตัดสินแพ้ชนะ ---
-        function triggerWireCut(colorName) {
-            if (!gameActive) return;
-
-            if (colorName === 'yellow') {
-                endGame(true, "ภารกิจสำเร็จ! คุณนำวัตถุมาบังตัดสายไฟสีเหลืองและกู้ระเบิดได้ปลอดภัย 🎉");
-            } else if (colorName === 'red') {
-                endGame(false, "MISSION FAILED! คุณเผลอไปบังสายไฟสีแดง วงจรชนวนทำงาน! ตู้มมม! 💥");
-            } else if (colorName === 'blue') {
-                endGame(false, "MISSION FAILED! คุณตัดสายไฟสีน้ำเงินผิดเส้น ระเบิดทำงาน! ตู้มมม! 💥");
-            }
-        }
-
-        function endGame(isWin, message) {
-            gameActive = false;
-            clearInterval(timerInterval);
-            
-            const resultScreen = document.getElementById('result-screen');
-            const resultStatus = document.getElementById('result-status');
-            const resultMsg = document.getElementById('result-msg');
-            
-            resultScreen.style.display = 'flex';
-            if (isWin) {
-                resultStatus.innerText = "MISSION SUCCESS!";
-                resultStatus.style.color = "#28a745";
-            } else {
-                resultStatus.innerText = "MISSION FAILED (BOOM!)";
-                resultStatus.style.color = "#dc3545";
-            }
-            resultMsg.innerText = message;
-        }
-
-        function resetGame() {
-            timeLeft = 30.00;
-            gameActive = true;
-            document.getElementById('timer').innerText = "30.00";
-            document.getElementById('result-screen').style.display = 'none';
-            
-            clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                if (timeLeft > 0 && gameActive) {
-                    timeLeft -= 0.01;
-                    document.getElementById('timer').innerText = timeLeft.toFixed(2);
-                } else if (timeLeft <= 0) {
-                    endGame(false, "เวลาหมดกู้ระเบิดไม่ทัน! ระเบิดทำงานตู้มมม! 💥");
-                }
-            }, 10);
-        }
-    </script>
-</body>
-</html>
+// --- [สิ้นสุดการคัดลอก] ---
