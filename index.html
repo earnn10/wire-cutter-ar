@@ -42,7 +42,6 @@
             z-index: 1;
             opacity: 0.85;
             filter: contrast(1.1) brightness(0.9);
-            pointer-events: none; /* ป้องกันกล้องแย่งรับแรงกด จิ้มทะลุไปหาสายไฟได้แม่นยำ */
         }
 
         #hud-grid {
@@ -62,7 +61,7 @@
             position: absolute;
             top: 0;
             left: 0;
-            z-index: 3;
+            z-index: 99; /* ดันแผงสายไฟมาไว้ชั้นบนสุด */
             width: 100%;
             height: 100%;
             display: flex;
@@ -77,12 +76,12 @@
             flex-direction: column;
             align-items: center;
             cursor: pointer;
-            z-index: 10; /* ดันปุ่มสายไฟมาไว้ด้านหน้าสุดเพื่อรับสัมผัส */
+            padding: 10px; /* เพิ่มพื้นที่ให้จิ้มง่ายขึ้น */
             -webkit-tap-highlight-color: transparent;
         }
 
         .wire-line {
-            width: 36px; /* ขยายแท่งให้ใช้นิ้วกดง่ายขึ้นในจอสัมผัส */
+            width: 36px;
             height: 240px;
             border-radius: 16px;
             border: 3px solid #ffffff;
@@ -92,7 +91,7 @@
         }
 
         .wire-capsule:active .wire-line {
-            transform: scale(0.95); /* เอฟเฟกต์ยุบตัวเล็กน้อยเวลาใช้นิ้วจิ้ม */
+            transform: scale(0.92);
         }
 
         .wire-label {
@@ -105,7 +104,6 @@
             border-radius: 4px;
             border: 1px solid rgba(255,255,255,0.3);
             text-transform: uppercase;
-            pointer-events: none;
         }
 
         #ui-header {
@@ -144,7 +142,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 20; /* ดันหน้าจอแพ้ชนะขึ้นมาปิดทับทับสายไฟ ป้องกันการกดซ้ำ */
+            z-index: 999; /* อยู่บนสุดเมื่อจบเกม */
             justify-content: center;
             align-items: center;
             flex-direction: column;
@@ -179,7 +177,7 @@
             width: 100%;
             height: 100%;
             background: #ffffff;
-            z-index: 15;
+            z-index: 50;
             pointer-events: none;
         }
         @keyframes boom {
@@ -199,7 +197,7 @@
         <div id="explosion-effect"></div>
 
         <div id="ui-header">
-            <span style="font-size: 12px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">CYBER DEFUSAL SYSTEM v5.0 (TOUCH ONLY)</span>
+            <span style="font-size: 12px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">CYBER DEFUSAL SYSTEM v5.5 (FIXED)</span>
             <div id="timer">30.00</div>
             <div id="instruction"></div>
         </div>
@@ -269,17 +267,21 @@
             targetColor = targetObj.name;
             
             const instruction = document.getElementById('instruction');
-            instruction.innerHTML = `ใช้เมาส์คลิกหรือใช้นิ้วจิ้มตัด: <span style="color:${targetObj.hex}; font-weight:bold; text-shadow: 0 0 10px ${targetObj.hex};">"${targetObj.label}"</span>`;
+            instruction.innerHTML = `ใช้นิ้วจิ้มหรือคลิกตัดเฉพาะ: <span style="color:${targetObj.hex}; font-weight:bold; text-shadow: 0 0 10px ${targetObj.hex};">"${targetObj.label}"</span>`;
 
             currentRoundWires.forEach(wire => {
                 const capsule = document.createElement('div');
                 capsule.className = 'wire-capsule';
                 
-                // ใช้ปุ่ม onclick ดักรับการคลิก/จิ้มตรงๆ แบบ 100% (ไม่มีการสแกนภาพใดๆ ทั้งสิ้น)
-                capsule.onclick = function(e) { 
+                // ฟังก์ชันสำหรับสั่งตัดสายไฟ
+                const handleCut = function(e) {
                     e.preventDefault();
-                    triggerWireCut(wire.name); 
+                    triggerWireCut(wire.name);
                 };
+
+                // รองรับทั้งระบบสัมผัสผ่านหน้าจอ และคลิกเมาส์บนคอม
+                capsule.addEventListener('touchstart', handleCut, { passive: false });
+                capsule.addEventListener('mousedown', handleCut);
                 
                 const wireLine = document.createElement('div');
                 wireLine.id = `${wire.name}-wire`;
@@ -313,7 +315,7 @@
             } else {
                 let wrongLabel = allColors.find(c => c.name === colorName).label;
                 playExplosionVFX();
-                endGame(false, `ระเบิดทำงาน! คุณเผลอไปจิ้มเส้นสีอื่น "${wrongLabel}"`);
+                endGame(false, `ระเบิดทำงาน! คุณพลาดไปจิ้มเส้นสีอื่น "${wrongLabel}"`);
             }
         }
 
