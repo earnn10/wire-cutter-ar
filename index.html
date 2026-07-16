@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Cyber Defusal Zone (AI Finger Only)</title>
+    <title>AR Cyber Defusal Zone (Perfect Mirror)</title>
     <!-- ดึง AI ตรวจจับมือของ Google มาใช้งาน -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -41,8 +41,8 @@
             width: 100%;
             height: 100%;
             z-index: 1;
-            transform: scaleX(-1);
-            pointer-events: none; /* ห้ามเมาส์คลิกโดนกล้อง */
+            transform: scaleX(-1); /* กลับด้านซ้ายขวาตัวกล้อง */
+            pointer-events: none;
         }
 
         #ar-wires-overlay {
@@ -57,7 +57,7 @@
             align-items: flex-end;
             box-sizing: border-box;
             padding: 0 40px 60px 40px;
-            pointer-events: none; /* ปิดการคลิกเมาส์และจิ้มจอถาวร 100% เมาส์จะกดสายไฟไม่ได้เลย */
+            pointer-events: none; /* ห้ามเมาส์กด */
         }
 
         .wire-capsule {
@@ -65,7 +65,7 @@
             flex-direction: column;
             align-items: center;
             position: relative;
-            pointer-events: none; 
+            pointer-events: none;
         }
 
         .wire-line {
@@ -121,8 +121,7 @@
             align-items: center;
             flex-direction: column;
             color: white;
-            /* หน้าจอนี้ให้กดปุ่มเริ่มใหม่ด้วยเมาส์ได้ */
-            pointer-events: auto; 
+            pointer-events: auto; /* ปลดล็อกให้เมาส์กดปุ่มเริ่มใหม่ได้ */
         }
         #success-screen { background: rgba(0, 15, 5, 0.95); border: 4px solid #00ff66; }
         #fail-screen { background: rgba(20, 0, 5, 0.95); border: 4px solid #ff0055; }
@@ -151,9 +150,9 @@
         <div id="ar-wires-overlay"></div>
 
         <div id="ui-header">
-            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER ONLY v6.1</span>
+            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER ONLY v6.2 (MIRROR FIX)</span>
             <div id="timer">30.00</div>
-            <div id="instruction">กำลังโหลดระบบ AI แขนเสื้อไม่ระเบิด...</div>
+            <div id="instruction">กำลังโหลดระบบ AI...</div>
         </div>
         
         <div id="success-screen" class="screen-overlay">
@@ -181,10 +180,9 @@
         let wirePositions = []; 
 
         const allColors = [
-            { name: 'red', hex: '#ff0055', label: 'สายไฟสีแดง' },
-            { name: 'yellow', hex: '#ffcc00', label: 'สายไฟสีเหลือง' },
             { name: 'blue', hex: '#0077ff', label: 'สายไฟสีน้ำเงิน' },
-            { name: 'green', hex: '#00ff66', label: 'สายไฟสีเขียว' }
+            { name: 'yellow', hex: '#ffcc00', label: 'สายไฟสีเหลือง' },
+            { name: 'red', hex: '#ff0055', label: 'สายไฟสีแดง' }
         ];
 
         const hands = new Hands({
@@ -215,14 +213,13 @@
             overlay.innerHTML = '';
             
             let shuffled = [...allColors].sort(() => 0.5 - Math.random());
-            let currentWires = shuffled.slice(0, 3); 
             
-            let targetObj = currentWires[Math.floor(Math.random() * currentWires.length)];
+            let targetObj = shuffled[Math.floor(Math.random() * shuffled.length)];
             targetColor = targetObj.name;
             
             document.getElementById('instruction').innerHTML = `เอานิ้วชี้กางอากาศแตะที่: <span style="color:${targetObj.hex}; font-weight:bold;">"${targetObj.label}"</span>`;
 
-            currentWires.forEach((wire, index) => {
+            shuffled.forEach((wire) => {
                 const capsule = document.createElement('div');
                 capsule.className = 'wire-capsule';
                 
@@ -243,7 +240,7 @@
 
             setTimeout(() => {
                 wirePositions = [];
-                currentWires.forEach(wire => {
+                shuffled.forEach(wire => {
                     const el = document.getElementById(`${wire.name}-wire`);
                     if (el) {
                         const rect = el.getBoundingClientRect();
@@ -266,14 +263,15 @@
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0 && gameActive) {
                 const landmarks = results.multiHandLandmarks[0];
-                const indexFingerTip = landmarks[8]; // จุดปลายนิ้วชี้
+                const indexFingerTip = landmarks[8]; 
                 
-                const fingerX = (1 - indexFingerTip.x) * canvasElement.width;
+                // แก้จุดสลับทิศทางแกน X (เปลี่ยนจาก 1 - indexFingerTip.x เป็น indexFingerTip.x ตรงๆ เพื่อให้ตามมือจริง)
+                const fingerX = indexFingerTip.x * canvasElement.width;
                 const fingerY = indexFingerTip.y * canvasElement.height;
 
-                // วาดเป้าเล็งสีฟ้าที่ปลายนิ้วชี้
+                // วาดจุดเล็งเป้าสีฟ้าบน Canvas
                 canvasCtx.beginPath();
-                canvasCtx.arc(fingerX, fingerY, 8, 0, 2 * Math.PI);
+                canvasCtx.arc(fingerX, fingerY, 10, 0, 2 * Math.PI);
                 canvasCtx.fillStyle = '#00f0ff';
                 canvasCtx.fill();
                 canvasCtx.strokeStyle = '#ffffff';
