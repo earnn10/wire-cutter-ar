@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Cyber Defusal Zone (v9.0)</title>
+    <title>AR Cyber Defusal Zone (v9.5)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
@@ -108,7 +108,6 @@
             text-shadow: 0 0 15px rgba(255, 0, 85, 0.8);
         }
 
-        /* แยกส่วนหน้าจอผลลัพธ์ให้รับแรงคลิกเมาส์ได้เต็มที่ */
         .screen-overlay {
             display: none;
             position: absolute;
@@ -116,12 +115,12 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 100; /* ดันขึ้นมาข้างบนสุด */
+            z-index: 100;
             justify-content: center;
             align-items: center;
             flex-direction: column;
             color: white;
-            pointer-events: auto !important; /* บังคับให้คลิกปุ่มได้แน่นอน */
+            pointer-events: auto !important;
         }
         #success-screen { background: rgba(0, 15, 5, 0.95); border: 4px solid #00ff66; }
         #fail-screen { background: rgba(20, 0, 5, 0.95); border: 4px solid #ff0055; }
@@ -140,9 +139,7 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
             transition: transform 0.1s;
         }
-        .btn-action:active {
-            transform: scale(0.95);
-        }
+        .btn-action:active { transform: scale(0.95); }
         #success-screen .btn-action { background: #00cc52; }
         #fail-screen .btn-action { background: #ff0055; }
     </style>
@@ -155,7 +152,7 @@
         <div id="ar-wires-overlay"></div>
 
         <div id="ui-header">
-            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER ONLY v9.0</span>
+            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER ONLY v9.5</span>
             <div id="timer">30.00</div>
             <div id="instruction">กำลังโหลดระบบ AI...</div>
         </div>
@@ -181,6 +178,7 @@
         let timeLeft = 30.00;
         let timerInterval;
         let gameActive = false;
+        let isCooldown = false; // ตัวแปรล็อกระบบชั่วคราวช่วงนับถอยหลัง
         let targetColor = '';
         let wireAreas = [];
 
@@ -219,12 +217,9 @@
             overlay.innerHTML = '';
             
             let shuffled = [...allColors].sort(() => 0.5 - Math.random()).slice(0, 3);
-            
             let targetObj = shuffled[Math.floor(Math.random() * shuffled.length)];
             targetColor = targetObj.name;
             
-            document.getElementById('instruction').innerHTML = `เอานิ้วชี้กางอากาศแตะที่: <span style="color:${targetObj.hex}; font-weight:bold;">"${targetObj.label}"</span>`;
-
             shuffled.forEach((wire) => {
                 const capsule = document.createElement('div');
                 capsule.className = 'wire-capsule';
@@ -244,28 +239,48 @@
                 overlay.appendChild(capsule);
             });
 
-            setTimeout(() => {
-                wireAreas = [];
-                shuffled.forEach((wire, index) => {
-                    let minX = 0.05 + (index * 0.3);
-                    let maxX = minX + 0.3;
-                    
-                    wireAreas.push({
-                        name: wire.name,
-                        minX: minX,
-                        maxX: maxX,
-                        minY: 0.35,
-                        maxY: 0.90
-                    });
+            // ตั้งค่าตำแหน่งสัมพัทธ์
+            wireAreas = [];
+            shuffled.forEach((wire, index) => {
+                let minX = 0.05 + (index * 0.3);
+                let maxX = minX + 0.3;
+                wireAreas.push({
+                    name: wire.name,
+                    minX: minX,
+                    maxX: maxX,
+                    minY: 0.35,
+                    maxY: 0.90
                 });
-            }, 300);
+            });
+
+            // เปิดระบการนับถอยหลังเตือนผู้เล่นให้เอามือลง
+            startCooldown(targetObj);
+        }
+
+        function startCooldown(targetObj) {
+            isCooldown = true;
+            gameActive = false;
+            let count = 3;
+            
+            const countInterval = setInterval(() => {
+                if(count > 0) {
+                    document.getElementById('instruction').innerHTML = `<span style="color:#ffcc00; font-weight:bold;">เตรียมตัว (เอามือลงก่อน): ${count}</span>`;
+                    count--;
+                } else {
+                    clearInterval(countInterval);
+                    isCooldown = false;
+                    gameActive = true;
+                    document.getElementById('instruction').innerHTML = `เอานิ้วชี้กางอากาศแตะที่: <span style="color:${targetObj.hex}; font-weight:bold;">"${targetObj.label}"</span>`;
+                    startTimer();
+                }
+            }, 400); // วิ่งนับถอยหลังอย่างรวดเร็วเพื่อให้ไม่เสียเวลา
         }
 
         function onHandResults(results) {
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0 && gameActive) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
                 const indexFingerTip = landmarks[8]; 
                 
@@ -277,11 +292,14 @@
 
                 canvasCtx.beginPath();
                 canvasCtx.arc(fingerX, fingerY, 10, 0, 2 * Math.PI);
-                canvasCtx.fillStyle = '#00f0ff';
+                canvasCtx.fillStyle = isCooldown ? '#ffaa00' : '#00f0ff'; // ถ้าช่วงคูลดาวน์จะเป็นจุดสีส้มเตือน
                 canvasCtx.fill();
                 canvasCtx.strokeStyle = '#ffffff';
                 canvasCtx.lineWidth = 2;
                 canvasCtx.stroke();
+
+                // ถ้าติดคูลดาวน์อยู่ จะไม่ทำการเช็กตัดสายไฟเด็ดขาด
+                if (!gameActive || isCooldown) return;
 
                 wireAreas.forEach(wire => {
                     if (rawX >= wire.minX && rawX <= wire.maxX &&
@@ -293,7 +311,7 @@
         }
 
         function triggerWireCut(colorName) {
-            if (!gameActive) return;
+            if (!gameActive || isCooldown) return;
 
             if (colorName === targetColor) {
                 endGame(true, `ภารกิจสำเร็จ! ใช้ปลายนิ้วชี้ตัดสายไฟถูกต้อง`);
@@ -314,18 +332,7 @@
             }
         }
 
-        function resetGame() {
-            canvasElement.width = 640;
-            canvasElement.height = 480;
-            
-            timeLeft = 30.00;
-            gameActive = true;
-            document.getElementById('timer').innerText = "30.00";
-            document.getElementById('success-screen').style.display = 'none';
-            document.getElementById('fail-screen').style.display = 'none';
-            
-            generateWires();
-            
+        function startTimer() {
             clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 if (timeLeft > 0 && gameActive) {
@@ -335,6 +342,18 @@
                     endGame(false, "เวลาหมดกู้ระเบิดไม่ทัน!");
                 }
             }, 10);
+        }
+
+        function resetGame() {
+            canvasElement.width = 640;
+            canvasElement.height = 480;
+            
+            timeLeft = 30.00;
+            document.getElementById('timer').innerText = "30.00";
+            document.getElementById('success-screen').style.display = 'none';
+            document.getElementById('fail-screen').style.display = 'none';
+            
+            generateWires();
         }
     </script>
 </body>
