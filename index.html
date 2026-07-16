@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Cyber Defusal Zone (v8.0)</title>
+    <title>AR Cyber Defusal Zone (v9.0)</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <style>
@@ -108,6 +108,7 @@
             text-shadow: 0 0 15px rgba(255, 0, 85, 0.8);
         }
 
+        /* แยกส่วนหน้าจอผลลัพธ์ให้รับแรงคลิกเมาส์ได้เต็มที่ */
         .screen-overlay {
             display: none;
             position: absolute;
@@ -115,27 +116,32 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 10;
+            z-index: 100; /* ดันขึ้นมาข้างบนสุด */
             justify-content: center;
             align-items: center;
             flex-direction: column;
             color: white;
-            pointer-events: auto;
+            pointer-events: auto !important; /* บังคับให้คลิกปุ่มได้แน่นอน */
         }
         #success-screen { background: rgba(0, 15, 5, 0.95); border: 4px solid #00ff66; }
         #fail-screen { background: rgba(20, 0, 5, 0.95); border: 4px solid #ff0055; }
 
         .btn-action {
             font-family: 'Prompt', sans-serif;
-            padding: 10px 25px;
-            font-size: 16px;
+            padding: 12px 30px;
+            font-size: 18px;
             font-weight: bold;
             color: white;
             border: none;
             border-radius: 8px;
             cursor: pointer;
-            margin-top: 15px;
-            pointer-events: auto;
+            margin-top: 20px;
+            pointer-events: auto !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+        .btn-action:active {
+            transform: scale(0.95);
         }
         #success-screen .btn-action { background: #00cc52; }
         #fail-screen .btn-action { background: #ff0055; }
@@ -149,20 +155,20 @@
         <div id="ar-wires-overlay"></div>
 
         <div id="ui-header">
-            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER ONLY v8.0</span>
+            <span style="font-size: 11px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">AI FINGER ONLY v9.0</span>
             <div id="timer">30.00</div>
             <div id="instruction">กำลังโหลดระบบ AI...</div>
         </div>
         
         <div id="success-screen" class="screen-overlay">
-            <h1 style="font-family: 'Orbitron'; color: #00ff66; margin: 0;">SYSTEM SECURED</h1>
-            <p id="success-msg"></p>
+            <h1 style="font-family: 'Orbitron'; color: #00ff66; margin: 0; font-size: 36px;">SYSTEM SECURED</h1>
+            <p id="success-msg" style="margin: 15px 0 5px 0;"></p>
             <button class="btn-action" onclick="resetGame()">เริ่มใหม่</button>
         </div>
 
         <div id="fail-screen" class="screen-overlay">
-            <h1 style="font-family: 'Orbitron'; color: #ff0055; margin: 0;">💥 DETONATED 💥</h1>
-            <p id="fail-msg"></p>
+            <h1 style="font-family: 'Orbitron'; color: #ff0055; margin: 0; font-size: 36px;">💥 DETONATED 💥</h1>
+            <p id="fail-msg" style="margin: 15px 0 5px 0;"></p>
             <button class="btn-action" onclick="resetGame()">ลองใหม่</button>
         </div>
     </div>
@@ -176,7 +182,7 @@
         let timerInterval;
         let gameActive = false;
         let targetColor = '';
-        let wireAreas = []; // เก็บสัดส่วนขอบเขตของสายไฟแต่ละคอลัมน์ (0 ถึง 1)
+        let wireAreas = [];
 
         const allColors = [
             { name: 'blue', hex: '#0077ff', label: 'สายไฟสีน้ำเงิน' },
@@ -212,7 +218,6 @@
             const overlay = document.getElementById('ar-wires-overlay');
             overlay.innerHTML = '';
             
-            // สุ่มเลือกมา 3 สีจากทั้งหมด
             let shuffled = [...allColors].sort(() => 0.5 - Math.random()).slice(0, 3);
             
             let targetObj = shuffled[Math.floor(Math.random() * shuffled.length)];
@@ -239,11 +244,9 @@
                 overlay.appendChild(capsule);
             });
 
-            // คำนวณสัดส่วนตำแหน่งสายไฟแบบแบ่งช่องหน้าจอ (แบ่งเป็น 3 คอลัมน์เท่าๆ กันแน่นอน ไม่เพี้ยนตามจอคอม)
             setTimeout(() => {
                 wireAreas = [];
                 shuffled.forEach((wire, index) => {
-                    // แบ่งฝั่งตามสัดส่วนจอจริง 0.0 ถึง 1.0 (อิงตาม flex space-around)
                     let minX = 0.05 + (index * 0.3);
                     let maxX = minX + 0.3;
                     
@@ -251,7 +254,7 @@
                         name: wire.name,
                         minX: minX,
                         maxX: maxX,
-                        minY: 0.35, // ขอบเขตความสูงของสายไฟช่วงกลาง-ล่างจอ
+                        minY: 0.35,
                         maxY: 0.90
                     });
                 });
@@ -266,11 +269,9 @@
                 const landmarks = results.multiHandLandmarks[0];
                 const indexFingerTip = landmarks[8]; 
                 
-                // คำนวณค่าสัดส่วนดิบจาก AI (0 ถึง 1) แบบ Mirror
                 const rawX = 1 - indexFingerTip.x;
                 const rawY = indexFingerTip.y;
 
-                // แปลงเป็นพิกเซลเพื่อวาดจุดสีฟ้าให้ตรงกับตาเห็นบนหน้าจอ
                 const fingerX = rawX * canvasElement.width;
                 const fingerY = rawY * canvasElement.height;
 
@@ -282,7 +283,6 @@
                 canvasCtx.lineWidth = 2;
                 canvasCtx.stroke();
 
-                // ใช้ค่าสัดส่วนดิบในการเช็กชนสายไฟโดยตรง เพื่อความแม่นยำสูงสุด
                 wireAreas.forEach(wire => {
                     if (rawX >= wire.minX && rawX <= wire.maxX &&
                         rawY >= wire.minY && rawY <= wire.maxY) {
