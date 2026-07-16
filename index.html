@@ -20,7 +20,6 @@
             overflow: hidden;
         }
 
-        /* กรอบแผงควบคุมเกมสุดเท่ */
         #bomb-panel {
             position: relative;
             width: 100%;
@@ -33,7 +32,6 @@
             overflow: hidden;
         }
 
-        /* ภาพจากกล้อง Iriun */
         #ar-camera-feed {
             position: absolute;
             top: 0;
@@ -45,7 +43,6 @@
             filter: contrast(1.1) brightness(0.9);
         }
 
-        /* เส้นตารางสแกนแบบ Sci-Fi */
         #hud-grid {
             position: absolute;
             top: 0;
@@ -59,7 +56,6 @@
             pointer-events: none;
         }
 
-        /* พื้นที่แสดงสายไฟ */
         #ar-wires-overlay {
             position: absolute;
             top: 0;
@@ -74,12 +70,10 @@
             padding: 0 40px 60px 40px;
         }
 
-        /* ตัวสายไฟดิจิทัล */
         .wire-capsule {
             display: flex;
             flex-direction: column;
             align-items: center;
-            transition: transform 0.2s;
         }
 
         .wire-line {
@@ -103,7 +97,6 @@
             text-transform: uppercase;
         }
 
-        /* แผง UI ด้านบน */
         #ui-header {
             position: absolute;
             top: 0;
@@ -132,7 +125,6 @@
             letter-spacing: 1px;
         }
 
-        /* หน้าจอบังคับผลลัพธ์ */
         .screen-overlay {
             display: none;
             position: absolute;
@@ -167,7 +159,6 @@
         #fail-screen .btn-action { background: #ff0055; }
         .btn-action:hover { transform: scale(1.05); }
 
-        /* เอฟเฟกต์แอนิเมชันระเบิดตู้ม (💥 Explosion VFX) */
         #explosion-effect {
             display: none;
             position: absolute;
@@ -201,14 +192,12 @@
             <div id="instruction"></div>
         </div>
         
-        <!-- หน้าจอชนะ -->
         <div id="success-screen" class="screen-overlay">
             <h1 style="font-family: 'Orbitron'; color: #00ff66; font-size: 36px; text-shadow: 0 0 15px #00ff66; margin: 0;">SYSTEM SECURED</h1>
             <p id="success-msg" style="margin: 20px 0; font-size: 16px; max-width: 80%;"></p>
             <button class="btn-action" onclick="resetGame()">เริ่มระบบใหม่</button>
         </div>
 
-        <!-- หน้าจอแพ้/ระเบิดทำงาน -->
         <div id="fail-screen" class="screen-overlay">
             <h1 style="font-family: 'Orbitron'; color: #ff0055; font-size: 36px; text-shadow: 0 0 15px #ff0055; margin: 0;">💥 DETONATED 💥</h1>
             <p id="fail-msg" style="margin: 20px 0; font-size: 16px; max-width: 80%;"></p>
@@ -265,7 +254,7 @@
             overlay.innerHTML = '';
             
             let shuffled = [...allColors].sort(() => 0.5 - Math.random());
-            let currentRoundWires = shuffled.slice(0, Math.floor(Math.random() * 2) + 3); // สุ่มมา 3-4 เส้น
+            let currentRoundWires = shuffled.slice(0, Math.floor(Math.random() * 2) + 3);
             
             let targetObj = currentRoundWires[Math.floor(Math.random() * currentRoundWires.length)];
             targetColor = targetObj.name;
@@ -309,7 +298,6 @@
             }, 100); 
         }
 
-        // ระบบตรวจจับความเคลื่อนไหว (ปรับเป็นระยะปานกลาง ไม่ไวเกินไป)
         function checkWireObstruction(colorName) {
             const wire = document.getElementById(colorName + '-wire');
             if (!wire) return;
@@ -348,7 +336,6 @@
                 let avgDifference = totalDifference / pixelCount;
                 previousPixels[colorName] = new Uint8ClampedArray(data);
 
-                // ปรับค่าความไวระดับปานกลางอยู่ที่เลข 16 (เพื่อไม่ให้แกว่งหรือสั่นไหวเองจนระเบิดง่ายเกินไป)
                 const midSensitivity = 16; 
 
                 if (avgDifference > midSensitivity) {
@@ -365,12 +352,11 @@
                 endGame(true, `ยอดเยี่ยม! คุณตัดวงจรที่ ${label} ได้ถูกเส้นสำเร็จ ระบบกลับมาปลอดภัยแล้ว`);
             } else {
                 let wrongLabel = allColors.find(c => c.name === colorName).label;
-                playExplosionVFX(); // สั่งเอฟเฟกต์ระเบิดทำงาน
+                playExplosionVFX();
                 endGame(false, `สัญญาณเตือนภัย! คุณพลาดไปตัด "${wrongLabel}" ทำให้ชนวนระเบิดทำงานทันที!`);
             }
         }
 
-        // ฟังก์ชันสร้างเอฟเฟกต์แสงระเบิดวาบบนจอ
         function playExplosionVFX() {
             const exp = document.getElementById('explosion-effect');
             exp.style.display = 'block';
@@ -393,7 +379,6 @@
                 document.getElementById('success-screen').style.display = 'flex';
             } else {
                 document.getElementById('fail-msg').innerText = message;
-                // ถ้าแพ้เพราะเวลาหมด ให้ระเบิดด้วย
                 if(timeLeft <= 0) playExplosionVFX();
                 document.getElementById('fail-screen').style.display = 'flex';
             }
