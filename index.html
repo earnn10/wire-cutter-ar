@@ -18,6 +18,7 @@
             min-height: 100vh;
             overflow: hidden;
             user-select: none;
+            -webkit-user-select: none;
         }
 
         #bomb-panel {
@@ -41,6 +42,7 @@
             z-index: 1;
             opacity: 0.85;
             filter: contrast(1.1) brightness(0.9);
+            pointer-events: none; /* ป้องกันกล้องแย่งรับแรงกด จิ้มทะลุไปหาสายไฟได้แม่นยำ */
         }
 
         #hud-grid {
@@ -75,20 +77,22 @@
             flex-direction: column;
             align-items: center;
             cursor: pointer;
+            z-index: 10; /* ดันปุ่มสายไฟมาไว้ด้านหน้าสุดเพื่อรับสัมผัส */
+            -webkit-tap-highlight-color: transparent;
         }
 
         .wire-line {
-            width: 32px; /* ขยายให้จิ้มง่ายขึ้น */
+            width: 36px; /* ขยายแท่งให้ใช้นิ้วกดง่ายขึ้นในจอสัมผัส */
             height: 240px;
             border-radius: 16px;
             border: 3px solid #ffffff;
             position: relative;
             background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.3) 10px, rgba(0,0,0,0.3) 20px);
-            transition: transform 0.1s, opacity 0.3s;
+            transition: transform 0.1s, opacity 0.2s;
         }
 
-        .wire-capsule:hover .wire-line {
-            transform: scale(1.05);
+        .wire-capsule:active .wire-line {
+            transform: scale(0.95); /* เอฟเฟกต์ยุบตัวเล็กน้อยเวลาใช้นิ้วจิ้ม */
         }
 
         .wire-label {
@@ -101,6 +105,7 @@
             border-radius: 4px;
             border: 1px solid rgba(255,255,255,0.3);
             text-transform: uppercase;
+            pointer-events: none;
         }
 
         #ui-header {
@@ -139,7 +144,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 5;
+            z-index: 20; /* ดันหน้าจอแพ้ชนะขึ้นมาปิดทับทับสายไฟ ป้องกันการกดซ้ำ */
             justify-content: center;
             align-items: center;
             flex-direction: column;
@@ -174,7 +179,7 @@
             width: 100%;
             height: 100%;
             background: #ffffff;
-            z-index: 6;
+            z-index: 15;
             pointer-events: none;
         }
         @keyframes boom {
@@ -194,7 +199,7 @@
         <div id="explosion-effect"></div>
 
         <div id="ui-header">
-            <span style="font-size: 12px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">CYBER DEFUSAL SYSTEM v4.0</span>
+            <span style="font-size: 12px; color: #00f0ff; letter-spacing: 3px; font-weight: bold;">CYBER DEFUSAL SYSTEM v5.0 (TOUCH ONLY)</span>
             <div id="timer">30.00</div>
             <div id="instruction"></div>
         </div>
@@ -264,13 +269,17 @@
             targetColor = targetObj.name;
             
             const instruction = document.getElementById('instruction');
-            instruction.innerHTML = `คลิกหรือจิ้มตัดวงจรเฉพาะ: <span style="color:${targetObj.hex}; font-weight:bold; text-shadow: 0 0 10px ${targetObj.hex};">"${targetObj.label}"</span>`;
+            instruction.innerHTML = `ใช้เมาส์คลิกหรือใช้นิ้วจิ้มตัด: <span style="color:${targetObj.hex}; font-weight:bold; text-shadow: 0 0 10px ${targetObj.hex};">"${targetObj.label}"</span>`;
 
             currentRoundWires.forEach(wire => {
                 const capsule = document.createElement('div');
                 capsule.className = 'wire-capsule';
-                // ดักจับการจิ้มหรือคลิกตรงๆ
-                capsule.onclick = function() { triggerWireCut(wire.name); };
+                
+                // ใช้ปุ่ม onclick ดักรับการคลิก/จิ้มตรงๆ แบบ 100% (ไม่มีการสแกนภาพใดๆ ทั้งสิ้น)
+                capsule.onclick = function(e) { 
+                    e.preventDefault();
+                    triggerWireCut(wire.name); 
+                };
                 
                 const wireLine = document.createElement('div');
                 wireLine.id = `${wire.name}-wire`;
@@ -295,17 +304,16 @@
         function triggerWireCut(colorName) {
             if (!gameActive) return;
 
-            // ทำให้เส้นที่โดนจิ้มโปร่งแสงลง (ฟีลเหมือนโดนตัด)
             const wire = document.getElementById(`${colorName}-wire`);
-            if (wire) wire.style.opacity = '0.2';
+            if (wire) wire.style.opacity = '0.1';
 
             if (colorName === targetColor) {
                 let label = allColors.find(c => c.name === targetColor).label;
-                endGame(true, `ยอดเยี่ยม! คุณจิ้มตัด ${label} ได้ถูกต้องภารกิจสำเร็จ!`);
+                endGame(true, `ภารกิจสำเร็จ! คุณจิ้มตัด ${label} ได้ถูกต้อง ระบบปลอดภัยแล้ว`);
             } else {
                 let wrongLabel = allColors.find(c => c.name === colorName).label;
                 playExplosionVFX();
-                endGame(false, `ตูม! คุณพลาดไปจิ้มตัด "${wrongLabel}" ระเบิดทำงานทันที!`);
+                endGame(false, `ระเบิดทำงาน! คุณเผลอไปจิ้มเส้นสีอื่น "${wrongLabel}"`);
             }
         }
 
