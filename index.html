@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>DISARM: ถอดชนวนด้วยตรรกะ</title>
+<style>
+  :root{
+    --bg:#0B0E11;
+    --panel:#171B20;
+    --panel2:#1D2329;
+    --edge:#2C343B;
+    --edge-lit:#3A444C;
+    --amber:#FFB020;
+    --amber-dim:#8A5E15;
+    --danger:#FF3B30;
+    --safe:#33D17A;
+    --text:#E7EAEE;
+    --text-dim:#8892A0;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --disp: Arial Narrow, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --w-red:#E63946; --w-blue:#2D6CDF; --w-yellow:#F4C430;
+    --w-green:#34C77B; --w-white:#EDEDED; --w-black:#2B2B2E;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:transparent;color:var(--text);font-family:var(--mono);}
+  body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px;}
+  #app{width:100%;max-width:640px;user-select:none;}
+
+  .frame{
+    background:linear-gradient(180deg,var(--panel) 0%, var(--bg) 100%);
+    border:1px solid var(--edge);
+    border-radius:14px;
+    box-shadow: 0 0 0 1px #000 inset, 0 20px 60px -20px #000;
+    overflow:hidden;
+  }
+  .frame.shake{ animation: shake .35s ease; }
+  @keyframes shake{
+    10%{transform:translate(-6px,2px);} 30%{transform:translate(6px,-2px);}
+    50%{transform:translate(-4px,1px);} 70%{transform:translate(4px,-1px);}
+    90%{transform:translate(-2px,0);} 100%{transform:translate(0,0);}
+  }
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px; border-bottom:1px solid var(--edge);
+    background:repeating-linear-gradient(135deg, #14181C, #14181C 8px, #171B20 8px, #171B20 16px);
+  }
+  .brand{ font-family:var(--disp); font-weight:800; letter-spacing:.14em; font-size:15px; color:var(--amber);}
+  .brand small{display:block; font-family:var(--mono); font-weight:400; letter-spacing:.05em; color:var(--text-dim); font-size:10px; margin-top:2px;}
+  .stats{ display:flex; gap:16px; align-items:center; }
+  .stat{ text-align:right; }
+  .stat .lbl{ font-size:9px; color:var(--text-dim); letter-spacing:.12em; }
+  .stat .val{ font-size:16px; font-weight:700; }
+  .lives{ display:flex; gap:5px; }
+  .life{ width:11px;height:11px;border-radius:50%; background:var(--danger); box-shadow:0 0 6px rgba(255,59,48,.6);}
+  .life.off{ background:#2A2E33; box-shadow:none; }
+
+  .timer{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:10px; border-bottom:1px solid var(--edge);
+    background:#0E1114;
+  }
+  .timer .digits{
+    font-size:34px; font-weight:700; letter-spacing:.06em; color:var(--safe);
+    text-shadow:0 0 10px currentColor;
+    transition:color .2s;
+  }
+  .timer .digits.warn{ color:var(--amber); }
+  .timer .digits.crit{ color:var(--danger); animation:flicker .5s infinite; }
+  @keyframes flicker{ 0%,100%{opacity:1;} 50%{opacity:.45;} }
+  .timer .unit{ font-size:10px; color:var(--text-dim); letter-spacing:.15em; }
+
+  .terminal{
+    margin:14px 16px 0; padding:12px 14px; background:#0A0D10;
+    border:1px solid var(--edge); border-radius:8px;
+    font-size:12.5px; line-height:1.65; color:#8FE6A8;
+    min-height:78px;
+  }
+  .terminal .head{ color:var(--text-dim); font-size:10px; letter-spacing:.14em; margin-bottom:6px;}
+  .terminal .rule{ color:#B9F3CB; }
+  .terminal .rule b{ color:var(--amber); }
+  .terminal .rule::before{ content:"› "; color:var(--text-dim); }
+
+  .panel-body{ padding:20px 16px 8px; }
+  .board{
+    background:
+      radial-gradient(circle at 20% 10%, #23292f 0%, transparent 40%),
+      var(--panel2);
+    border:1px solid var(--edge); border-radius:10px; padding:20px 14px 10px;
+    position:relative;
+  }
+  .rivet{ position:absolute; width:6px;height:6px;border-radius:50%; background:#0A0D10; box-shadow: inset 0 1px 1px #000, 0 1px 0 #3a444c22; }
+
+  .wires{ display:flex; justify-content:center; gap:18px; padding:6px 0 4px; flex-wrap:wrap; }
+  .wire-slot{ display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; }
+  .wire-slot .idx{ font-size:9px; color:var(--text-dim); letter-spacing:.1em; }
+  .wire-svg{ width:34px; height:120px; overflow:visible; }
+  .wire-slot:hover .wire-line{ filter:brightness(1.25); }
+  .wire-slot.disabled{ cursor:default; pointer-events:none; opacity:.55; }
+  .wire-line{ transition:filter .15s; }
+  .clip{ fill:#3a444c; }
+
+  .hint-row{ text-align:center; margin-top:10px; }
+  .hint{ font-size:10.5px; color:var(--text-dim); letter-spacing:.04em; }
+  .hint b{ color:var(--amber); }
+
+  .status-line{
+    margin:12px 16px 0; padding:10px 12px; border-radius:8px;
+    font-size:12.5px; text-align:center; letter-spacing:.03em;
+    border:1px solid var(--edge); min-height:20px;
+  }
+  .status-line.ok{ color:var(--safe); border-color:#1c5c3c; background:#0E1712; }
+  .status-line.bad{ color:var(--danger); border-color:#5c1c1c; background:#170E0E; }
+  .status-line.neutral{ color:var(--text-dim); }
+
+  .defuse-wrap{ display:flex; justify-content:center; padding:16px 16px 20px; }
+  .defuse-btn{
+    position:relative; width:120px;height:120px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #262d33, #14181c 70%);
+    border:2px solid var(--edge-lit);
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--disp); font-weight:800; letter-spacing:.1em; font-size:11px;
+    color:var(--text-dim); cursor:pointer; touch-action:none;
+  }
+  .defuse-btn.active{ color:var(--amber); border-color:var(--amber); }
+  .defuse-btn[disabled]{ opacity:.35; cursor:not-allowed; }
+  .ring-svg{ position:absolute; inset:0; transform:rotate(-90deg); }
+  .ring-bg{ fill:none; stroke:#2A2E33; stroke-width:4; }
+  .ring-fg{ fill:none; stroke:var(--amber); stroke-width:4; stroke-linecap:round; }
+
+  .overlay{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:14px; background:rgba(6,8,10,.92);
+    opacity:0; pointer-events:none; transition:opacity .25s;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+  .overlay h2{ font-family:var(--disp); letter-spacing:.08em; font-size:26px; margin:0; }
+  .overlay p{ color:var(--text-dim); font-size:13px; margin:0; text-align:center; max-width:320px;}
+  .overlay button{
+    font-family:var(--disp); font-weight:800; letter-spacing:.1em; font-size:13px;
+    background:var(--amber); color:#1a1200; border:none; padding:12px 26px; border-radius:6px; cursor:pointer;
+  }
+  .frame{ position:relative; }
+
+  footer{ padding:10px 16px 16px; text-align:center; }
+  footer p{ margin:0; font-size:10px; color:var(--text-dim); line-height:1.6; }
+
+  @media (max-width:420px){
+    .wire-svg{ width:26px; height:100px; }
+    .wires{ gap:10px; }
+    .timer .digits{ font-size:28px; }
+  }
+
+  .cam-row{ display:flex; align-items:center; justify-content:center; gap:10px; padding:10px 16px 0; }
+  .cam-toggle{
+    font-family:var(--mono); font-size:11px; letter-spacing:.04em;
+    background:#171B20; color:var(--text); border:1px solid var(--edge-lit);
+    padding:8px 14px; border-radius:20px; cursor:pointer; display:flex; align-items:center; gap:7px;
+  }
+  .cam-toggle .dot{ width:7px;height:7px;border-radius:50%; background:#4A545C; }
+  .cam-toggle.on .dot{ background:var(--danger); box-shadow:0 0 6px var(--danger); animation:flicker 1s infinite; }
+  .cam-toggle.on{ border-color:var(--danger); color:#FF8B84; }
+  .cam-status{ font-size:10.5px; color:var(--text-dim); text-align:center; padding:4px 16px 0; min-height:14px; }
+
+  .cam-panel{
+    display:none; margin:10px 16px 0; border:1px solid var(--edge); border-radius:8px;
+    overflow:hidden; background:#000; position:relative;
+  }
+  .cam-panel.show{ display:block; }
+  .cam-panel video, .cam-panel canvas{
+    width:100%; display:block; transform:scaleX(-1);
+  }
+  .cam-panel canvas{ position:absolute; top:0; left:0; }
+  .cam-panel .cam-tag{
+    position:absolute; top:6px; left:8px; font-size:9px; letter-spacing:.1em;
+    background:rgba(0,0,0,.55); color:var(--danger); padding:2px 7px; border-radius:3px;
+  }
+
+  .cursor-dot{
+    position:fixed; top:0; left:0; width:34px; height:34px; margin:-17px 0 0 -17px;
+    pointer-events:none; z-index:9999; display:none; transition:transform .06s linear;
+    filter:drop-shadow(0 0 4px rgba(0,0,0,.6));
+  }
+  .cursor-dot.show{ display:block; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="frame" id="frame">
+
+    <header>
+      <div class="brand">DISARM<small>ถอดชนวนด้วยตรรกะ</small></div>
+      <div class="stats">
+        <div class="stat"><div class="lbl">ด่าน</div><div class="val" id="lvlVal">1</div></div>
+        <div class="stat"><div class="lbl">คะแนน</div><div class="val" id="scoreVal">0</div></div>
+        <div class="stat">
+          <div class="lbl">ชีวิต</div>
+          <div class="lives" id="lives"></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="timer">
+      <span class="digits" id="timerVal">45</span><span class="unit">SEC</span>
+    </div>
+
+    <div class="terminal">
+      <div class="head">// เงื่อนไขถอดสลัก (อ่านตามลำดับ ข้อแรกที่จริงคือคำตอบ)</div>
+      <div id="rulesBox"></div>
+    </div>
+
+    <div class="cam-row">
+      <button class="cam-toggle" id="camToggle" type="button"><span class="dot"></span><span id="camToggleLabel">เปิดกล้อง จับท่ามือ</span></button>
+    </div>
+    <div class="cam-status" id="camStatus"></div>
+    <div class="cam-panel" id="camPanel">
+      <span class="cam-tag">LIVE</span>
+      <video id="inputVideo" playsinline muted></video>
+      <canvas id="camCanvas"></canvas>
+    </div>
+
+    <div class="panel-body">
+      <div class="board" id="board">
+        <div class="wires" id="wires"></div>
+        <div class="hint-row"><span class="hint">แตะ/คลิกสายไฟ หรือทำท่า <b>กรรไกร</b> (ชี้+กลาง หนีบเข้าหากัน) ผ่านกล้องเพื่อ "ตัด"</span></div>
+      </div>
+    </div>
+
+    <div class="status-line neutral" id="statusLine">วิเคราะห์เงื่อนไข แล้วเลือกสายที่ถูกต้อง</div>
+
+    <div class="defuse-wrap">
+      <button class="defuse-btn" id="defuseBtn" disabled>
+        <svg class="ring-svg" viewBox="0 0 120 120">
+          <circle class="ring-bg" cx="60" cy="60" r="54"></circle>
+          <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="54" stroke-dasharray="339" stroke-dashoffset="339"></circle>
+        </svg>
+        <span id="defuseLabel">กดค้าง<br>ถอดสลัก</span>
+      </button>
+    </div>
+
+    <footer>
+      <p>กดปุ่มค้างไว้ด้วยปลายนิ้วชี้ (จำลอง) จนครบตามเวลาเพื่อยืนยันการถอดสลัก</p>
+    </footer>
+
+    <div class="overlay" id="overlay">
+      <h2 id="overTitle">GAME OVER</h2>
+      <p id="overText">หมดวินาที หมดโชค</p>
+      <button id="restartBtn">เริ่มใหม่</button>
+    </div>
+  </div>
+</div>
+
+<svg id="cursorDot" class="cursor-dot" viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="17" cy="17" r="15" fill="rgba(255,176,32,0.15)" stroke="#FFB020" stroke-width="2"/>
+  <path id="cursorScissor" d="M11,11 L23,23 M23,11 L11,23" stroke="#FFB020" stroke-width="2.6" stroke-linecap="round"/>
+</svg>
+
+<script>
+(function(){
+  const COLORS = ['red','blue','yellow','green','white','black'];
+  const COLOR_HEX = {red:'var(--w-red)',blue:'var(--w-blue)',yellow:'var(--w-yellow)',green:'var(--w-green)',white:'var(--w-white)',black:'var(--w-black)'};
+  const COLOR_TH  = {red:'แดง',blue:'น้ำเงิน',yellow:'เหลือง',green:'เขียว',white:'ขาว',black:'ดำ'};
+
+  // ordinal words for clue text (1-based)
+  const ORD = ['หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด'];
+  function ord(i){ return 'เส้นที่ '+ (i+1); }
+
+  // Rule library: each rule has a Thai description template and a test(wires)=>index|null
+  const RULES = [
+    {
+      text: (n)=> `ถ้าไม่มีสายสีแดงเลย ให้ตัดสายเส้นที่ 2`,
+      test: (w)=> w.includes('red') ? null : (w.length>=2 ? 1 : 0)
+    },
+    {
+      text: (n)=> `ถ้ามีสายสีแดง <b>มากกว่า 1</b> เส้น ให้ตัดสายสีแดงเส้นสุดท้าย`,
+      test: (w)=>{ const idxs=w.map((c,i)=>c==='red'?i:-1).filter(i=>i>=0); return idxs.length>1? idxs[idxs.length-1] : null; }
+    },
+    {
+      text: (n)=> `ถ้าสายเส้นสุดท้ายเป็นสีเหลือง ให้ตัดสายเส้นแรก`,
+      test: (w)=> w[w.length-1]==='yellow' ? 0 : null
+    },
+    {
+      text: (n)=> `ถ้ามีสีที่ซ้ำกัน ให้ตัดสายที่ซ้ำเป็นเส้นที่สอง (การซ้ำครั้งแรกที่พบ)`,
+      test: (w)=>{
+        const seen={};
+        for(let i=0;i<w.length;i++){
+          if(seen[w[i]]!==undefined){ return i; }
+          seen[w[i]]=i;
+        }
+        return null;
+      }
+    },
+    {
+      text: (n)=> `ถ้าจำนวนสายทั้งหมดเป็นเลขคู่ ให้ตัดสายสีน้ำเงินเส้นแรก (ถ้าไม่มี ให้ตัดเส้นสุดท้าย)`,
+      test: (w)=>{ if(w.length%2!==0) return null; const bi=w.indexOf('blue'); return bi!==-1? bi : w.length-1; }
+    },
+    {
+      text: (n)=> `ถ้ามีสายสีขาวและสีดำอยู่ <b>ติดกัน</b> ห้ามตัดทั้งคู่ ให้ตัดสายเส้นก่อนหน้าคู่นั้นแทน`,
+      test: (w)=>{
+        for(let i=0;i<w.length-1;i++){
+          const a=w[i], b=w[i+1];
+          if((a==='white'&&b==='black')||(a==='black'&&b==='white')){
+            return i>0 ? i-1 : Math.min(i+2, w.length-1);
+          }
+        }
+        return null;
+      }
+    },
+    {
+      text: (n)=> `ถ้ามีสายสีเขียวอย่างน้อย 2 เส้น ให้ตัดสายสีเขียวเส้น<u>แรก</u>`,
+      test: (w)=>{ const idxs=w.map((c,i)=>c==='green'?i:-1).filter(i=>i>=0); return idxs.length>=2? idxs[0] : null; }
+    }
+  ];
+  const CATCH_ALL = { text:(n)=>`ถ้าไม่เข้าเงื่อนไขข้างต้นเลย ให้ตัดสายเส้นสุดท้าย`, test:(w)=> w.length-1 };
+
+  function pickN(arr,n){
+    const pool=arr.slice(); const out=[];
+    while(out.length<n && pool.length){
+      const i=Math.floor(Math.random()*pool.length);
+      out.push(pool.splice(i,1)[0]);
+    }
+    return out;
+  }
+  function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+  // ---- state ----
+  let level=1, score=0, hp=3, timeLeft=45, timerId=null;
+  let wires=[], ruleSet=[], correctIndex=-1, phase='playing'; // playing | solved | locked
+  let holdRaf=null, holdStart=0;
+  const HOLD_MS = 1300;
+
+  const $ = (id)=>document.getElementById(id);
+  const wiresEl=$('wires'), rulesBox=$('rulesBox'), timerVal=$('timerVal'),
+        statusLine=$('statusLine'), livesEl=$('lives'), scoreVal=$('scoreVal'),
+        lvlVal=$('lvlVal'), frame=$('frame'), overlay=$('overlay'),
+        overTitle=$('overTitle'), overText=$('overText'), defuseBtn=$('defuseBtn'),
+        ringFg=$('ringFg'), defuseLabel=$('defuseLabel');
+
+  const RING_C = 339;
+
+  function beep(freq,dur,type,vol){
+    try{
+      const ctx = beep.ctx || (beep.ctx = new (window.AudioContext||window.webkitAudioContext)());
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type=type||'sine'; o.frequency.value=freq;
+      g.gain.value = vol||0.05;
+      o.connect(g); g.connect(ctx.destination);
+      o.start();
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+dur);
+      o.stop(ctx.currentTime+dur+0.02);
+    }catch(e){}
+  }
+  function sndSuccess(){ beep(880,.09,'square',.05); setTimeout(()=>beep(1320,.12,'square',.05),90); }
+  function sndFail(){ beep(90,.35,'sawtooth',.09); }
+  function sndTick(){ beep(1500,.02,'square',.015); }
+
+  function levelConfig(lvl){
+    const wireCount = Math.min(4 + Math.floor((lvl-1)/1), 8);
+    const colorCount = Math.min(4 + Math.floor((lvl-1)/2), 6);
+    const ruleCount = Math.min(2 + Math.floor((lvl-1)/2), RULES.length);
+    return {wireCount, colorCount, ruleCount};
+  }
+
+  function genPanel(lvl){
+    const cfg = levelConfig(lvl);
+    const palette = COLORS.slice(0, cfg.colorCount);
+    let w, rs, ci;
+    // ensure solvable + not degenerate loop guard
+    let tries=0;
+    do{
+      w = Array.from({length:cfg.wireCount}, ()=> rand(palette));
+      rs = pickN(RULES, cfg.ruleCount);
+      ci = null;
+      for(const r of rs){ const idx=r.test(w); if(idx!==null){ ci=idx; break; } }
+      if(ci===null){ ci = CATCH_ALL.test(w); }
+      tries++;
+    }while(tries<20 && ci===null);
+    return {wires:w, ruleSet:[...rs, CATCH_ALL], correctIndex:ci};
+  }
+
+  function renderRules(){
+    rulesBox.innerHTML = ruleSet.map((r,i)=> `<div class="rule">${i+1}. ${r.text()}</div>`).join('');
+  }
+
+  function wireSvg(color, cut){
+    const stroke = COLOR_HEX[color];
+    const outline = (color==='white' || color==='black') ? `stroke:#000;stroke-opacity:.35;` : '';
+    if(!cut){
+      return `<svg class="wire-svg" viewBox="0 0 34 120">
+        <rect class="clip" x="6" y="0" width="22" height="10" rx="2"></rect>
+        <rect class="clip" x="6" y="110" width="22" height="10" rx="2"></rect>
+        <path class="wire-line" d="M17,10 C10,35 24,55 17,80 C12,95 22,105 17,110" fill="none" stroke="${stroke}" stroke-width="8" stroke-linecap="round" style="${outline}"/>
+      </svg>`;
+    }
+    return `<svg class="wire-svg" viewBox="0 0 34 120">
+      <rect class="clip" x="6" y="0" width="22" height="10" rx="2"></rect>
+      <rect class="clip" x="6" y="110" width="22" height="10" rx="2"></rect>
+      <path d="M17,10 C10,28 20,38 15,46" fill="none" stroke="${stroke}" stroke-width="8" stroke-linecap="round" style="${outline}"/>
+      <path d="M18,84 C13,92 22,100 17,110" fill="none" stroke="${stroke}" stroke-width="8" stroke-linecap="round" style="${outline}"/>
+      <circle cx="15" cy="46" r="3" fill="#FFD23F"/>
+      <circle cx="19" cy="60" r="2" fill="#FFD23F"/>
+      <circle cx="14" cy="72" r="2.4" fill="#FFD23F"/>
+    </svg>`;
+  }
+
+  function renderWires(cutIdx, wrongIdx){
+    wiresEl.innerHTML = wires.map((c,i)=>{
+      const isCut = (cutIdx===i);
+      const disabled = phase!=='playing' ? 'disabled' : '';
+      return `<div class="wire-slot ${disabled}" data-i="${i}">
+        <div class="idx">${i+1}</div>
+        ${wireSvg(c, isCut)}
+      </div>`;
+    }).join('');
+    [...wiresEl.querySelectorAll('.wire-slot')].forEach(el=>{
+      el.addEventListener('click', onWireClick);
+    });
+  }
+
+  function renderLives(){
+    livesEl.innerHTML = Array.from({length:3},(_,i)=> `<div class="life ${i<hp?'':'off'}"></div>`).join('');
+  }
+
+  function setStatus(msg, kind){
+    statusLine.className = 'status-line ' + (kind||'neutral');
+    statusLine.textContent = msg;
+  }
+
+  function newPanel(resetTimer){
+    const p = genPanel(level);
+    wires=p.wires; ruleSet=p.ruleSet; correctIndex=p.correctIndex; phase='playing';
+    renderRules();
+    renderWires(-1);
+    defuseBtn.disabled = true;
+    defuseBtn.classList.remove('active');
+    defuseLabel.innerHTML = 'กดค้าง<br>ถอดสลัก';
+    setStatus('วิเคราะห์เงื่อนไข แล้วเลือกสายที่ถูกต้อง','neutral');
+    if(resetTimer!==false){ timeLeft = 45; }
+    lvlVal.textContent = level; scoreVal.textContent = score; renderLives();
+    updateTimerUI();
+  }
+
+  function updateTimerUI(){
+    timerVal.textContent = timeLeft;
+    timerVal.classList.remove('warn','crit');
+    if(timeLeft<=10) timerVal.classList.add('crit');
+    else if(timeLeft<=20) timerVal.classList.add('warn');
+  }
+
+  function startTimer(){
+    stopTimer();
+    timerId = setInterval(()=>{
+      if(phase!=='playing') return;
+      timeLeft--;
+      if(timeLeft<=10 && timeLeft>0) sndTick();
+      updateTimerUI();
+      if(timeLeft<=0){ onTimeUp(); }
+    },1000);
+  }
+  function stopTimer(){ if(timerId){ clearInterval(timerId); timerId=null; } }
+
+  function shakeFrame(){ frame.classList.remove('shake'); void frame.offsetWidth; frame.classList.add('shake'); }
+  function flashBad(){
+    frame.style.boxShadow = '0 0 0 3px rgba(255,59,48,.65), 0 20px 60px -20px #000';
+    setTimeout(()=>{ frame.style.boxShadow=''; }, 220);
+  }
+
+  function loseHP(reason){
+    hp--; renderLives(); sndFail(); shakeFrame(); flashBad();
+    if(hp<=0){ gameOver(reason); return; }
+    // penalty + fresh layout, same level
+    timeLeft = Math.max(5, timeLeft-10);
+    setTimeout(()=>{ newPanel(false); }, 650);
+  }
+
+  function onTimeUp(){
+    phase='locked';
+    setStatus('หมดเวลา! ระเบิดทำงาน','bad');
+    loseHP('time');
+  }
+
+  function onWireClick(e){
+    const i = parseInt(e.currentTarget.dataset.i,10);
+    cutWire(i);
+  }
+
+  function cutWire(i){
+    if(phase!=='playing') return;
+    if(i===correctIndex){
+      phase='solved';
+      renderWires(i);
+      score += 50; scoreVal.textContent = score;
+      setStatus('สายถูกต้อง! ปลอดภัย — กดค้างปุ่มด้านล่างเพื่อถอดสลัก','ok');
+      sndSuccess();
+      defuseBtn.disabled = false;
+      defuseBtn.classList.add('active');
+    } else {
+      phase='locked';
+      renderWires(i);
+      setStatus('ผิดเงื่อนไข! ระเบิดทำงาน','bad');
+      loseHP('wrong');
+    }
+  }
+
+  // hold-to-defuse
+  function holdStartFn(e){
+    if(e && e.preventDefault) e.preventDefault();
+    if(defuseBtn.disabled) return;
+    if(holdRaf) return; // already holding
+    holdStart = performance.now();
+    cancelAnimationFrame(holdRaf);
+    step();
+    function step(){
+      const t = performance.now() - holdStart;
+      const pct = Math.min(1, t/HOLD_MS);
+      ringFg.setAttribute('stroke-dashoffset', RING_C*(1-pct));
+      if(pct>=1){
+        defuseComplete();
+        return;
+      }
+      holdRaf = requestAnimationFrame(step);
+    }
+  }
+  function holdEndFn(){
+    if(phase==='playing_defused') return;
+    cancelAnimationFrame(holdRaf);
+    holdRaf = null;
+    if(defuseBtn.disabled) return;
+    ringFg.setAttribute('stroke-dashoffset', RING_C);
+  }
+  function defuseComplete(){
+    cancelAnimationFrame(holdRaf);
+    holdRaf = null;
+    phase='defused';
+    defuseBtn.disabled = true;
+    setStatus('ถอดสลักสำเร็จ — แผงปลอดภัย','ok');
+    beep(660,.08,'triangle',.05); setTimeout(()=>beep(990,.08,'triangle',.05),80); setTimeout(()=>beep(1320,.14,'triangle',.06),160);
+    setTimeout(()=>{ level++; newPanel(true); }, 900);
+  }
+
+  function gameOver(){
+    stopTimer();
+    overTitle.textContent = 'GAME OVER';
+    overText.textContent = `ระเบิดทำงาน — คะแนนสุดท้าย ${score} แต้ม จากด่านที่ ${level}`;
+    overlay.classList.add('show');
+  }
+
+  function restart(){
+    level=1; score=0; hp=3; overlay.classList.remove('show');
+    newPanel(true); startTimer();
+  }
+
+  defuseBtn.addEventListener('pointerdown', holdStartFn);
+  defuseBtn.addEventListener('pointerup', holdEndFn);
+  defuseBtn.addEventListener('pointerleave', holdEndFn);
+  defuseBtn.addEventListener('pointercancel', holdEndFn);
+  $('restartBtn').addEventListener('click', restart);
+
+  newPanel(true);
+  startTimer();
+
+  // ---------------- Camera hand-tracking (scissors gesture) ----------------
+  const camToggle=$('camToggle'), camToggleLabel=$('camToggleLabel'), camStatus=$('camStatus'),
+        camPanel=$('camPanel'), inputVideo=$('inputVideo'), camCanvas=$('camCanvas'), cursorDot=$('cursorDot');
+  const camCtx = camCanvas.getContext('2d');
+  let camOn=false, camStream=null, handsApi=null, cameraUtil=null, scriptsLoaded=false;
+  let gestureOpen=true, camHoveringDefuse=false;
+  const OPEN_T=0.09, CLOSE_T=0.05;
+
+  function loadScript(src){
+    return new Promise((resolve,reject)=>{
+      const s=document.createElement('script');
+      s.src=src; s.crossOrigin='anonymous'; s.referrerPolicy='no-referrer';
+      s.onload=()=>resolve(); s.onerror=()=>reject(new Error('load fail: '+src));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function ensureScripts(){
+    if(scriptsLoaded) return true;
+    camStatus.textContent = 'กำลังโหลดระบบจับภาพมือ...';
+    const base='https://cdn.jsdelivr.net/npm/@mediapipe';
+    try{
+      await loadScript(base+'/camera_utils/camera_utils.js');
+      await loadScript(base+'/drawing_utils/drawing_utils.js');
+      await loadScript(base+'/hands/hands.js');
+      scriptsLoaded = true;
+      return true;
+    }catch(err){
+      camStatus.textContent = 'โหลดระบบจับภาพมือไม่สำเร็จ (หน้าต่างพรีวิวนี้อาจบล็อกสคริปต์ภายนอก) — ลองดาวน์โหลดไฟล์แล้วเปิดในเบราว์เซอร์ของคุณเองเพื่อใช้กล้องได้เต็มรูปแบบ ระหว่างนี้ใช้คลิก/แตะแทนได้';
+      return false;
+    }
+  }
+
+  async function startCamera(){
+    const ok = await ensureScripts();
+    if(!ok) return;
+    try{
+      camStatus.textContent = 'กำลังขอสิทธิ์เข้าถึงกล้อง...';
+      camStream = await navigator.mediaDevices.getUserMedia({video:{width:480,height:360}, audio:false});
+      inputVideo.srcObject = camStream;
+      await inputVideo.play();
+      camCanvas.width = inputVideo.videoWidth||480;
+      camCanvas.height = inputVideo.videoHeight||360;
+      camPanel.classList.add('show');
+
+      handsApi = new Hands({locateFile:(f)=> `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+      handsApi.setOptions({maxNumHands:1, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5});
+      handsApi.onResults(onHandResults);
+
+      cameraUtil = new Camera(inputVideo, {
+        onFrame: async ()=>{ await handsApi.send({image:inputVideo}); },
+        width:480, height:360
+      });
+      cameraUtil.start();
+
+      camOn = true;
+      camToggle.classList.add('on'); camToggleLabel.textContent='ปิดกล้อง';
+      cursorDot.classList.add('show');
+      camStatus.textContent = 'ทำท่ากรรไกร (นิ้วชี้+นิ้วกลาง หนีบเข้าหากัน) เหนือสายไฟเพื่อ "ตัด"';
+    }catch(err){
+      camStatus.textContent = 'เข้าถึงกล้องไม่ได้ (ตรวจสิทธิ์การใช้กล้องของเบราว์เซอร์) — ใช้คลิก/แตะแทนได้เลย';
+    }
+  }
+
+  function stopCamera(){
+    camOn = false;
+    if(cameraUtil){ try{ cameraUtil.stop(); }catch(e){} }
+    if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+    camPanel.classList.remove('show');
+    cursorDot.classList.remove('show');
+    camToggle.classList.remove('on'); camToggleLabel.textContent='เปิดกล้อง จับท่ามือ';
+    camStatus.textContent='';
+    if(camHoveringDefuse){ holdEndFn(); camHoveringDefuse=false; }
+  }
+
+  camToggle.addEventListener('click', ()=>{ camOn ? stopCamera() : startCamera(); });
+
+  function onHandResults(results){
+    camCtx.save();
+    camCtx.clearRect(0,0,camCanvas.width,camCanvas.height);
+    camCtx.drawImage(results.image,0,0,camCanvas.width,camCanvas.height);
+    if(results.multiHandLandmarks && results.multiHandLandmarks.length){
+      const lm = results.multiHandLandmarks[0];
+      if(window.drawConnectors && window.HAND_CONNECTIONS){
+        drawConnectors(camCtx, lm, HAND_CONNECTIONS, {color:'#FFB020', lineWidth:2});
+        drawLandmarks(camCtx, lm, {color:'#FF3B30', radius:2.5});
+      }
+      camCtx.restore();
+
+      const tipIdx = lm[8], tipMid = lm[12];
+      const mirroredX = 1 - tipIdx.x; // selfie mirror
+      const px = mirroredX * window.innerWidth;
+      const py = tipIdx.y * window.innerHeight;
+      cursorDot.style.transform = `translate(${px}px, ${py}px)`;
+
+      const dist = Math.hypot(tipIdx.x-tipMid.x, tipIdx.y-tipMid.y);
+      let snipped=false;
+      if(gestureOpen && dist < CLOSE_T){ gestureOpen=false; snipped=true; }
+      else if(!gestureOpen && dist > OPEN_T){ gestureOpen=true; }
+      cursorDot.querySelector('#cursorScissor').setAttribute('stroke', gestureOpen ? '#FFB020' : '#33D17A');
+
+      const hoveredEl = document.elementFromPoint(px, py);
+      const wireSlot = hoveredEl ? hoveredEl.closest('.wire-slot') : null;
+      const onDefuse = hoveredEl ? hoveredEl.closest('#defuseBtn') : null;
+
+      if(snipped && wireSlot && !wireSlot.classList.contains('disabled') && phase==='playing'){
+        cutWire(parseInt(wireSlot.dataset.i,10));
+      }
+      if(onDefuse && !defuseBtn.disabled){
+        if(!camHoveringDefuse){ camHoveringDefuse=true; holdStartFn(null); }
+      } else if(camHoveringDefuse){
+        camHoveringDefuse=false; holdEndFn();
+      }
+    } else {
+      camCtx.restore();
+      cursorDot.style.transform = 'translate(-100px,-100px)';
+      if(camHoveringDefuse){ camHoveringDefuse=false; holdEndFn(); }
+    }
+  }
+})();
+</script>
+</body>
+</html>
