@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Wire Cutter Bomb Defusal</title>
+    
+    <!-- Include A-Frame and MediaPipe libraries -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #webcam {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            z-index: -1;
+        }
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 10;
+            pointer-events: none;
+        }
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 24px;
+            letter-spacing: 2px;
+            color: #ff3333;
+        }
+        #timer {
+            font-size: 48px;
+            font-weight: bold;
+            font-family: monospace;
+            color: #ffcc00;
+        }
+        #instruction {
+            font-size: 16px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 15px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 20;
+        }
+        #game-over-title {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .btn {
+            padding: 12px 30px;
+            font-size: 18px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.2s;
+            pointer-events: auto;
+        }
+        .btn:hover {
+            background: #218838;
+            transform: scale(1.05);
+        }
+        /* Custom cursor visualizer for hand tracking */
+        #hand-cursor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: rgba(0, 255, 0, 0.7);
+            border: 2px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 15;
+            display: none;
+            box-shadow: 0 0 10px #00ff00;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Camera feed for Background AR -->
+    <video id="webcam" autoplay playsinline></video>
+
+    <!-- Custom Hand Pointer -->
+    <div id="hand-cursor"></div>
+
+    <!-- UI Overlay -->
+    <div id="ui-container">
+        <h1>กู้ระเบิดสายไฟ AR</h1>
+        <div id="timer">30.00</div>
+        <div id="instruction">ขยับนิ้วชี้ไปแตะที่สายไฟเพื่อตัดสายไฟที่ถูกต้อง!</div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen">
+        <div id="game-over-title">MISSION FAILED</div>
+        <p id="game-over-reason" style="font-size: 20px; margin-bottom: 30px;"></p>
+        <button class="btn" onclick="resetGame()">เล่นใหม่อีกครั้ง</button>
+    </div>
+
+    <!-- A-Frame 3D Scene -->
+    <a-scene vr-mode-ui="enabled: false" embedded style="width: 100%; height: 100%;">
+        
+        <!-- Camera positioned facing the scene center -->
+        <a-entity camera position="0 0 3"></a-entity>
+
+        <a-assets>
+            <!-- Sound effects (optional fallback) -->
+        </a-assets>
+
+        <!-- The Bomb Base Model constructed with simple A-Frame geometry -->
+        <a-entity id="bomb-assembly" position="0 -0.2 0">
+            <!-- Main Dynamite Sticks -->
+            <a-cylinder position="-0.3 0 0" radius="0.1" height="0.8" color="#cc0000" rotation="0 0 0"></a-cylinder>
+            <a-cylinder position="0 0 0" radius="0.1" height="0.8" color="#cc0000" rotation="0 0 0"></a-cylinder>
+            <a-cylinder position="0.3 0 0" radius="0.1" height="0.8" color="#cc0000" rotation="0 0 0"></a-cylinder>
+            <!-- Black Tape holding dynamite -->
+            <a-cylinder position="0 0.2 0.01" radius="0.31" height="0.1" color="#111" rotation="0 0 0" open-ended="true" side="double"></a-cylinder>
+            <a-cylinder position="0 -0.2 0.01" radius="0.31" height="0.1" color="#111" rotation="0 0 0" open-ended="true" side="double"></a-cylinder>
+            
+            <!-- Timer Display Module -->
+            <a-box position="0 0.1 0.15" width="0.4" height="0.2" depth="0.1" color="#222">
+                <a-box position="0 0 0.05" width="0.35" height="0.15" depth="0.01" color="#111"></a-box>
+            </a-box>
+
+            <!-- Wires (Interactable curves built with small cylinders to look like wires) -->
+            <!-- Wire 1: Red -->
+            <a-entity id="wire-red-parent" class="wire" data-color="red">
+                <a-cylinder class="clickable" id="wire-red" position="-0.2 0.45 0.1" rotation="0 0 45" radius="0.015" height="0.25" color="#ff3333"></a-cylinder>
+            </a-entity>
+
+            <!-- Wire 2: Blue -->
+            <a-entity id="wire-blue-parent" class="wire" data-color="blue">
+                <a-cylinder class="clickable" id="wire-blue" position="0 0.45 0.1" rotation="0 0 0" radius="0.015" height="0.25" color="#3333ff"></a-cylinder>
+            </a-entity>
+
+            <!-- Wire 3: Yellow -->
+            <a-entity id="wire-yellow-parent" class="wire" data-color="yellow">
+                <a-cylinder class="clickable" id="wire-yellow" position="0.2 0.45 0.1" rotation="0 0 -45" radius="0.015" height="0.25" color="#ffff33"></a-cylinder>
+            </a-entity>
+        </a-entity>
+
+        <!-- Decorative Sparks or Lights -->
+        <a-light type="ambient" color="#ffffff" intensity="0.8"></a-light>
+        <a-light type="directional" color="#ffffff" intensity="0.5" position="-1 2 1"></a-light>
+    </a-scene>
+
+    <script>
+        // --- GAME LOGIC STATE ---
+        let timeRemaining = 30.00;
+        let gameActive = true;
+        let timerInterval = null;
+        let correctWireColor = "";
+        const colors = ["red", "blue", "yellow"];
+
+        // UI Elements
+        const timerEl = document.getElementById("timer");
+        const gameOverScreen = document.getElementById("game-over-screen");
+        const gameOverTitle = document.getElementById("game-over-title");
+        const gameOverReason = document.getElementById("game-over-reason");
+        const instructionEl = document.getElementById("instruction");
+        const cursorEl = document.getElementById("hand-cursor");
+
+        function startGame() {
+            timeRemaining = 30.00;
+            gameActive = true;
+            gameOverScreen.style.display = "none";
+            
+            // Randomly pick a correct wire color to cut
+            correctWireColor = colors[Math.floor(Math.random() * colors.length)];
+            let displayColorThai = "";
+            if(correctWireColor === "red") displayColorThai = "<span style='color:#ff3333; font-weight:bold;'>สีแดง</span>";
+            if(correctWireColor === "blue") displayColorThai = "<span style='color:#5555ff; font-weight:bold;'>สีน้ำเงิน</span>";
+            if(correctWireColor === "yellow") displayColorThai = "<span style='color:#ffff33; font-weight:bold;'>สีเหลือง</span>";
+
+            instructionEl.innerHTML = `คำสั่ง: โปรดใช้มือตัดเฉพาะ <b>"สายไฟ${displayColorThai}"</b> เท่านั้น!`;
+
+            // Reset wire visual states
+            document.getElementById("wire-red").setAttribute("color", "#ff3333");
+            document.getElementById("wire-blue").setAttribute("color", "#3333ff");
+            document.getElementById("wire-yellow").setAttribute("color", "#ffff33");
+            document.getElementById("wire-red").setAttribute("visible", "true");
+            document.getElementById("wire-blue").setAttribute("visible", "true");
+            document.getElementById("wire-yellow").setAttribute("visible", "true");
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (gameActive) {
+                    timeRemaining -= 0.01;
+                    if (timeRemaining <= 0) {
+                        timeRemaining = 0;
+                        endGame(false, "เวลาหมดกู้ระเบิดไม่ทัน! ตู้มมม!");
+                    }
+                    timerEl.innerText = timeRemaining.toFixed(2);
+                }
+            }, 10);
+        }
+
+        function endGame(success, reason) {
+            gameActive = false;
+            clearInterval(timerInterval);
+            gameOverScreen.style.display = "flex";
+            if (success) {
+                gameOverTitle.innerText = "MISSION ACCOMPLISHED";
+                gameOverTitle.style.color = "#28a745";
+                gameOverReason.innerHTML = reason;
+            } else {
+                gameOverTitle.innerText = "MISSION FAILED (BOOM!)";
+                gameOverTitle.style.color = "#dc3545";
+                gameOverReason.innerHTML = reason;
+            }
+        }
+
+        function resetGame() {
+            startGame();
+        }
+
+        // Action when a wire is cut
+        function cutWire(color) {
+            if (!gameActive) return;
+            
+            const targetWire = document.getElementById(`wire-${color}`);
+            targetWire.setAttribute("visible", "false"); // Hide wire simulating it is cut
+
+            if (color === correctWireColor) {
+                endGame(true, `คุณตัดสายไฟ${getColorNameThai(color)}ได้ถูกต้อง! กู้ระเบิดสำเร็จแล้ว 🎉`);
+            } else {
+                endGame(false, `คุณตัดสายไฟผิดเส้น! สายไฟ${getColorNameThai(color)}เชื่อมต่อวงจรชนวนระเบิด! ตู้มมม! 💥`);
+            }
+        }
+
+        function getColorNameThai(color) {
+            if (color === "red") return "สีแดง";
+            if (color === "blue") return "สีน้ำเงิน";
+            return "สีเหลือง";
+        }
+
+        // --- WEBCAM BACKGROUND SET-UP ---
+        const video = document.getElementById('webcam');
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Camera access denied or error:", err);
+                instructionEl.innerText = "ไม่สามารถเปิดกล้องได้ โปรดยอมรับการอนุญาตเปิดกล้อง";
+            });
+
+
+        // --- MEDIAPIPE HAND TRACKING & INTERACTION ---
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onHandResults);
+
+        const camera = new Camera(video, {
+            onFrame: async () => {
+                await hands.send({ image: video });
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+
+        // Object Tracking / Screen-to-World Raycaster Simulation
+        function onHandResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                cursorEl.style.display = "block";
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Get the index finger tip landmark (Point 8)
+                const indexFingerTip = landmarks[8];
+                
+                // Convert normalized coordinates (0 to 1) into Screen pixels
+                // Flip X because the webcam is mirrored
+                const screenX = (1 - indexFingerTip.x) * window.innerWidth;
+                const screenY = indexFingerTip.y * window.innerHeight;
+
+                // Move HTML hand cursor tracker
+                cursorEl.style.left = `${screenX}px`;
+                cursorEl.style.top = `${screenY}px`;
+
+                // Perform simplified 3D collision check
+                checkCollisionWithWires(indexFingerTip.x, indexFingerTip.y);
+            } else {
+                cursorEl.style.display = "none";
+            }
+        }
+
+        // A simplified projection mapping to check if hand finger tip coordinates touch the wire objects
+        function checkCollisionWithWires(normX, normY) {
+            if (!gameActive) return;
+
+            // Map 0-1 normalized coordinated into custom boundaries in front of 3D objects
+            // Red wire is on the left, Blue middle, Yellow right
+            // Map mirrored view x: 0 (left) to 1 (right)
+            const x = 1 - normX; 
+            const y = normY;
+
+            // Simple boundary detection (tuned for typical webcam frame aspect ratios)
+            // Red Wire boundaries
+            if (x > 0.25 && x < 0.40 && y > 0.20 && y < 0.45) {
+                const redWire = document.getElementById("wire-red");
+                if (redWire.getAttribute("visible") !== "false") {
+                    cutWire("red");
+                }
+            }
+            // Blue Wire boundaries
+            else if (x > 0.43 && x < 0.57 && y > 0.20 && y < 0.45) {
+                const blueWire = document.getElementById("wire-blue");
+                if (blueWire.getAttribute("visible") !== "false") {
+                    cutWire("blue");
+                }
+            }
+            // Yellow Wire boundaries
+            else if (x > 0.60 && x < 0.75 && y > 0.20 && y < 0.45) {
+                const yellowWire = document.getElementById("wire-yellow");
+                if (yellowWire.getAttribute("visible") !== "false") {
+                    cutWire("yellow");
+                }
+            }
+        }
+
+        // Initialize Game
+        startGame();
+    </script>
+</body>
+</html>
